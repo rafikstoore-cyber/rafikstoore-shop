@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatPrice } from "@/lib/utils";
 
 export default async function AdminDashboard() {
-  const supabase = createClient();
+const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
