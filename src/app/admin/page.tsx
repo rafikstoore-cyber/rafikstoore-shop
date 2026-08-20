@@ -1,92 +1,201 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+type Product = {
+  id: number;
+  name: string;
+  price: string;
+  oldPrice: string;
+  image: string;
+  tag: string;
+  active: boolean;
+};
+
+type Order = {
+  id: number;
+  customer: string;
+  phone: string;
+  total: string;
+  status: string;
+};
+
+const defaultProducts: Product[] = [
+  {
+    id: 1,
+    name: "سماعات لاسلكية Pro",
+    price: "899",
+    oldPrice: "1,199",
+    image:
+      "https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?auto=format&fit=crop&w=800&q=80",
+    tag: "الأكثر طلبًا",
+    active: true,
+  },
+  {
+    id: 2,
+    name: "ساعة ذكية رياضية",
+    price: "1,299",
+    oldPrice: "1,699",
+    image:
+      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80",
+    tag: "عرض مميز",
+    active: true,
+  },
+  {
+    id: 3,
+    name: "حقيبة ظهر عصرية",
+    price: "749",
+    oldPrice: "999",
+    image:
+      "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=80",
+    tag: "جديد",
+    active: true,
+  },
+];
+
+const defaultOrders: Order[] = [
+  {
+    id: 1001,
+    customer: "محمد علي",
+    phone: "06XXXXXXXX",
+    total: "899",
+    status: "جديد",
+  },
+  {
+    id: 1002,
+    customer: "أحمد",
+    phone: "06XXXXXXXX",
+    total: "1,299",
+    status: "قيد المعالجة",
+  },
+];
 
 export default function AdminPage() {
-  const [active, setActive] = useState("dashboard");
+  const [tab, setTab] = useState("dashboard");
 
-  const menu = [
-    { id: "dashboard", name: "الرئيسية", icon: "📊" },
-    { id: "products", name: "المنتجات", icon: "📦" },
-    { id: "orders", name: "الطلبات", icon: "🛒" },
-    { id: "customers", name: "العملاء", icon: "👥" },
-    { id: "settings", name: "الإعدادات", icon: "⚙️" },
-  ];
+  const [products, setProducts] =
+    useState<Product[]>(defaultProducts);
 
-  return (
-    <main
-      dir="rtl"
-      className="min-h-screen bg-gray-100 text-gray-900"
-    >
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
-          <div>
-            <h1 className="text-xl font-bold">
-              لوحة تحكم RAFIK STORE
-            </h1>
-            <p className="mt-1 text-sm text-gray-500">
-              إدارة المتجر
-            </p>
-          </div>
+  const [orders, setOrders] =
+    useState<Order[]>(defaultOrders);
 
-          <a
-            href="/"
-            className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-50"
-          >
-            مشاهدة المتجر
-          </a>
-        </div>
-      </header>
+  const [storeName, setStoreName] =
+    useState("متجر رافيك");
 
-      <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6">
-        {/* Sidebar */}
-        <aside className="hidden w-64 shrink-0 md:block">
-          <div className="sticky top-24 rounded-2xl border bg-white p-3 shadow-sm">
-            {menu.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setActive(item.id)}
-                className={`mb-2 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-right transition ${
-                  active === item.id
-                    ? "bg-black text-white"
-                    : "hover:bg-gray-100"
-                }`}
-              >
-                <span>{item.icon}</span>
-                <span className="font-medium">
-                  {item.name}
-                </span>
-              </button>
-            ))}
-          </div>
-        </aside>
+  const [phone, setPhone] =
+    useState("06XXXXXXXX");
 
-        {/* Content */}
-        <section className="min-w-0 flex-1">
-          {active === "dashboard" && (
-            <>
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold">
-                  مرحبًا بك 👋
-                </h2>
-                <p className="mt-1 text-gray-500">
-                  من هنا يمكنك التحكم في متجرك بالكامل.
-                </p>
-              </div>
+  const [showProductForm, setShowProductForm] =
+    useState(false);
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Stat
-                  title="المنتجات"
-                  value="4"
-                  icon="📦"
-                />
-                <Stat
-                  title="الطلبات"
-                  value="0"
-                  icon="🛒"
-                />
-                <Stat
-                  title="العملاء"
-                  value="0"
-                  icon="👥"
+  const [editingId, setEditingId] =
+    useState<number | null>(null);
+
+  const [newProduct, setNewProduct] =
+    useState({
+      name: "",
+      price: "",
+      oldPrice: "",
+      image: "",
+      tag: "جديد",
+    });
+
+  useEffect(() => {
+    try {
+      const savedProducts = localStorage.getItem(
+        "rafikstore_products"
+      );
+
+      const savedOrders = localStorage.getItem(
+        "rafikstore_orders"
+      );
+
+      const savedSettings = localStorage.getItem(
+        "rafikstore_settings"
+      );
+
+      if (savedProducts) {
+        setProducts(JSON.parse(savedProducts));
+      }
+
+      if (savedOrders) {
+        setOrders(JSON.parse(savedOrders));
+      }
+
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+
+        if (settings.storeName) {
+          setStoreName(settings.storeName);
+        }
+
+        if (settings.phone) {
+          setPhone(settings.phone);
+        }
+      }
+    } catch {
+      console.log("تعذر تحميل البيانات");
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "rafikstore_products",
+      JSON.stringify(products)
+    );
+  }, [products]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "rafikstore_orders",
+      JSON.stringify(orders)
+    );
+  }, [orders]);
+
+  function saveSettings() {
+    localStorage.setItem(
+      "rafikstore_settings",
+      JSON.stringify({
+        storeName,
+        phone,
+      })
+    );
+
+    alert("تم حفظ إعدادات المتجر");
+  }
+
+  function openAddProduct() {
+    setEditingId(null);
+
+    setNewProduct({
+      name: "",
+      price: "",
+      oldPrice: "",
+      image: "",
+      tag: "جديد",
+    });
+
+    setShowProductForm(true);
+  }
+
+  function openEditProduct(product: Product) {
+    setEditingId(product.id);
+
+    setNewProduct({
+      name: product.name,
+      price: product.price,
+      oldPrice: product.oldPrice,
+      image: product.image,
+      tag: product.tag,
+    });
+
+    setShowProductForm(true);
+  }
+
+  function saveProduct() {
+    if (!newProduct.name || !newProduct.price) {
+      alert("أدخل اسم المنتج والسعر");
+      return;
+    }
+
+    if (editingId
