@@ -1,283 +1,98 @@
-"use client";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { formatPrice } from "@/lib/utils";
 
-import { useEffect, useMemo, useState } from "react";
+export default async function AdminDashboard() {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-type Product = {
-  name: string;
-  price: string;
-  oldPrice?: string;
-  image: string;
-  badge?: string;
-};
+  if (!user) redirect("/account");
 
-const emptyProduct: Product = {
-  name: "",
-  price: "",
-  oldPrice: "",
-  image: "",
-  badge: "",
-};
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
 
-export default function AdminPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [form, setForm] = useState<Product>(emptyProduct);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    async function loadProducts() {
-      try {
-        const response = await fetch("/api/products");
-
-        if (!response.ok) {
-          throw new Error("Failed to load products");
-        }
-
-        const data = await response.json();
-        setProducts(Array.isArray(data) ? data : []);
-      } catch {
-        setMessage("تعذر تحميل المنتجات");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadProducts();
-  }, []);
-
-  const filteredProducts = useMemo(() => {
-    const value = search.trim().toLowerCase();
-
-    if (!value) return products;
-
-    return products.filter((product) =>
-      product.name.toLowerCase().includes(value)
+  if (profile?.role !== "admin") {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-24 text-center sm:px-6">
+        <h1 className="font-display text-2xl font-bold text-rafik-navy">
+          غير مصرح لك بالوصول لهاد الصفحة
+        </h1>
+      </div>
     );
-  }, [products, search]);
-
-  function handleChange(
-    field: keyof Product,
-    value: string
-  ) {
-    setForm((current) => ({
-      ...current,
-      [field]: value,
-    }));
   }
 
-  function startEdit(index: number) {
-    const product = products[index];
+  const { data: orders } = await supabase
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(50);
 
-    setForm({
-      name: product.name || "",
-      price: product.price || "",
-      oldPrice: product.oldPrice || "",
-      image: product.image || "",
-      badge: product.badge || "",
-    });
+  const { count: productCount } = await supabase
+    .from("products")
+    .select("*", { count: "exact", head: true });
 
-    setEditingIndex(index);
-    setMessage("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function cancelEdit() {
-    setEditingIndex(null);
-    setForm(emptyProduct);
-    setMessage("");
-  }
-
-  function saveProduct() {
-    if (!form.name.trim()) {
-      setMessage("اكتب اسم المنتج أولًا");
-      return;
-    }
-
-    if (!form.price.trim()) {
-      setMessage("اكتب سعر المنتج");
-      return;
-    }
-
-    if (editingIndex === null) {
-      setProducts((current) => [...current, form]);
-      setMessage("تمت إضافة المنتج إلى القائمة");
-    } else {
-      setProducts((current) =>
-        current.map((product, index) =>
-          index === editingIndex ? form : product
-        )
-      );
-
-      setMessage("تم تعديل المنتج");
-    }
-
-    setForm(emptyProduct);
-    setEditingIndex(null);
-  }
-
-  function deleteProduct(index: number) {
-    const product = products[index];
-
-    const confirmed = window.confirm(
-      `هل تريد حذف "${product.name}"؟`
-    );
-
-    if (!confirmed) return;
-
-    setProducts((current) =>
-      current.filter((_, productIndex) => productIndex !== index)
-    );
-
-    setMessage("تم حذف المنتج من القائمة");
-  }
+  const totalRevenue = orders
+    ?.filter((o) => o.status !== "cancelled")
+    .reduce((sum, o) => sum + Number(o.total), 0) ?? 0;
 
   return (
-    <main
-      dir="rtl"
-      className="min-h-screen bg-gray-100 text-gray-900"
-    >
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-white shadow-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
-          <div>
-            <h1 className="text-xl font-bold">
-              لوحة تحكم متجر رافيك
-            </h1>
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+      <div className="mb-8 flex items-center justify-between">
+        <h1 className="font-display text-3xl font-bold text-rafik-navy">
+          لوحة التحكم
+        </h1>
+        <a href="/admin/products" className="btn-outline">
+          إدارة المنتجات
+        </a>
+      </div>
 
-            <p className="mt-1 text-sm text-gray-500">
-              إدارة المنتجات والأسعار والعروض
-            </p>
-          </div>
-
-          <a
-            href="/"
-            className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold transition hover:bg-gray-50"
-          >
-            مشاهدة المتجر
-          </a>
+      <div className="mb-10 grid gap-4 sm:grid-cols-3">
+        <div className="card p-6">
+          <p className="text-sm text-rafik-navy/60">إجمالي الطلبات</p>
+          <p className="mt-1 text-2xl font-bold text-rafik-navy">{orders?.length ?? 0}</p>
         </div>
-      </header>
+        <div className="card p-6">
+          <p className="text-sm text-rafik-navy/60">المنتجات</p>
+          <p className="mt-1 text-2xl font-bold text-rafik-navy">{productCount ?? 0}</p>
+        </div>
+        <div className="card p-6">
+          <p className="text-sm text-rafik-navy/60">إجمالي المبيعات</p>
+          <p className="mt-1 text-2xl font-bold text-rafik-navy">{formatPrice(totalRevenue)}</p>
+        </div>
+      </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-6">
-        {/* Statistics */}
-        <section className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <p className="text-sm text-gray-500">المنتجات</p>
-            <p className="mt-2 text-3xl font-bold">
-              {products.length}
-            </p>
-          </div>
+      <h2 className="mb-4 font-display text-xl font-bold text-rafik-navy">آخر الطلبات</h2>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-rafik-navy/10 text-start text-rafik-navy/60">
+              <th className="py-2 text-start">رقم الطلب</th>
+              <th className="py-2 text-start">العميل</th>
+              <th className="py-2 text-start">الحالة</th>
+              <th className="py-2 text-start">المجموع</th>
+            </tr>
+          </thead>
+          <tbody>
+            {orders?.map((o) => (
+              <tr key={o.id} className="border-b border-rafik-navy/5">
+                <td className="py-3 font-semibold text-rafik-navy">{o.order_number}</td>
+                <td className="py-3">{o.customer_name}</td>
+                <td className="py-3">{o.status}</td>
+                <td className="py-3">{formatPrice(o.total)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <p className="text-sm text-gray-500">العروض</p>
-            <p className="mt-2 text-3xl font-bold">
-              {products.filter((p) => p.oldPrice).length}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <p className="text-sm text-gray-500">منتجات عليها شارة</p>
-            <p className="mt-2 text-3xl font-bold">
-              {products.filter((p) => p.badge).length}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <p className="text-sm text-gray-500">الحالة</p>
-            <p className="mt-2 font-bold text-green-600">
-              لوحة التحكم
-            </p>
-          </div>
-        </section>
-
-        {/* Product form */}
-        <section className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold">
-                {editingIndex === null
-                  ? "إضافة منتج جديد"
-                  : "تعديل المنتج"}
-              </h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                أدخل معلومات المنتج ثم احفظها.
-              </p>
-            </div>
-
-            {editingIndex !== null && (
-              <button
-                onClick={cancelEdit}
-                className="rounded-xl border px-4 py-2 text-sm"
-              >
-                إلغاء التعديل
-              </button>
-            )}
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm font-semibold">
-                اسم المنتج
-              </label>
-
-              <input
-                value={form.name}
-                onChange={(e) =>
-                  handleChange("name", e.target.value)
-                }
-                placeholder="مثال: سماعات لاسلكية"
-                className="w-full rounded-xl border px-4 py-3 outline-none focus:border-black"
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold">
-                السعر
-              </label>
-
-              <input
-                value={form.price}
-                onChange={(e) =>
-                  handleChange("price", e.target.value)
-                }
-                placeholder="مثال: 899"
-                className="w-full rounded-xl border px-4 py-3 outline-none focus:border-black"
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold">
-                السعر القديم
-              </label>
-
-              <input
-                value={form.oldPrice}
-                onChange={(e) =>
-                  handleChange("oldPrice", e.target.value)
-                }
-                placeholder="مثال: 1199"
-                className="w-full rounded-xl border px-4 py-3 outline-none focus:border-black"
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold">
-                الشارة
-              </label>
-
-              <input
-                value={form.badge}
-                onChange={(e) =>
-                  handleChange("badge", e.target.value)
-                }
-                placeholder="مثال: عرض خاص"
-                className="w-full rounded-xl border px-4 py-3 outline-none focus:border-black"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-semibold">
-                رابط
+      <p className="mt-6 text-xs text-rafik-navy/40">
+        باش تدير حساب admin: بدّل role ديال profile فـ Supabase table editor لـ &quot;admin&quot;.
+      </p>
+    </div>
+  );
+}
