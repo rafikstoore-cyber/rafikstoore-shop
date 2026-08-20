@@ -1,201 +1,283 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Product = {
-  id: number;
   name: string;
   price: string;
-  oldPrice: string;
+  oldPrice?: string;
   image: string;
-  tag: string;
-  active: boolean;
+  badge?: string;
 };
 
-type Order = {
-  id: number;
-  customer: string;
-  phone: string;
-  total: string;
-  status: string;
+const emptyProduct: Product = {
+  name: "",
+  price: "",
+  oldPrice: "",
+  image: "",
+  badge: "",
 };
-
-const defaultProducts: Product[] = [
-  {
-    id: 1,
-    name: "سماعات لاسلكية Pro",
-    price: "899",
-    oldPrice: "1,199",
-    image:
-      "https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?auto=format&fit=crop&w=800&q=80",
-    tag: "الأكثر طلبًا",
-    active: true,
-  },
-  {
-    id: 2,
-    name: "ساعة ذكية رياضية",
-    price: "1,299",
-    oldPrice: "1,699",
-    image:
-      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80",
-    tag: "عرض مميز",
-    active: true,
-  },
-  {
-    id: 3,
-    name: "حقيبة ظهر عصرية",
-    price: "749",
-    oldPrice: "999",
-    image:
-      "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=80",
-    tag: "جديد",
-    active: true,
-  },
-];
-
-const defaultOrders: Order[] = [
-  {
-    id: 1001,
-    customer: "محمد علي",
-    phone: "06XXXXXXXX",
-    total: "899",
-    status: "جديد",
-  },
-  {
-    id: 1002,
-    customer: "أحمد",
-    phone: "06XXXXXXXX",
-    total: "1,299",
-    status: "قيد المعالجة",
-  },
-];
 
 export default function AdminPage() {
-  const [tab, setTab] = useState("dashboard");
-
-  const [products, setProducts] =
-    useState<Product[]>(defaultProducts);
-
-  const [orders, setOrders] =
-    useState<Order[]>(defaultOrders);
-
-  const [storeName, setStoreName] =
-    useState("متجر رافيك");
-
-  const [phone, setPhone] =
-    useState("06XXXXXXXX");
-
-  const [showProductForm, setShowProductForm] =
-    useState(false);
-
-  const [editingId, setEditingId] =
-    useState<number | null>(null);
-
-  const [newProduct, setNewProduct] =
-    useState({
-      name: "",
-      price: "",
-      oldPrice: "",
-      image: "",
-      tag: "جديد",
-    });
+  const [products, setProducts] = useState<Product[]>([]);
+  const [form, setForm] = useState<Product>(emptyProduct);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
-    try {
-      const savedProducts = localStorage.getItem(
-        "rafikstore_products"
-      );
+    async function loadProducts() {
+      try {
+        const response = await fetch("/api/products");
 
-      const savedOrders = localStorage.getItem(
-        "rafikstore_orders"
-      );
-
-      const savedSettings = localStorage.getItem(
-        "rafikstore_settings"
-      );
-
-      if (savedProducts) {
-        setProducts(JSON.parse(savedProducts));
-      }
-
-      if (savedOrders) {
-        setOrders(JSON.parse(savedOrders));
-      }
-
-      if (savedSettings) {
-        const settings = JSON.parse(savedSettings);
-
-        if (settings.storeName) {
-          setStoreName(settings.storeName);
+        if (!response.ok) {
+          throw new Error("Failed to load products");
         }
 
-        if (settings.phone) {
-          setPhone(settings.phone);
-        }
+        const data = await response.json();
+        setProducts(Array.isArray(data) ? data : []);
+      } catch {
+        setMessage("تعذر تحميل المنتجات");
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      console.log("تعذر تحميل البيانات");
     }
+
+    loadProducts();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem(
-      "rafikstore_products",
-      JSON.stringify(products)
-    );
-  }, [products]);
+  const filteredProducts = useMemo(() => {
+    const value = search.trim().toLowerCase();
 
-  useEffect(() => {
-    localStorage.setItem(
-      "rafikstore_orders",
-      JSON.stringify(orders)
-    );
-  }, [orders]);
+    if (!value) return products;
 
-  function saveSettings() {
-    localStorage.setItem(
-      "rafikstore_settings",
-      JSON.stringify({
-        storeName,
-        phone,
-      })
+    return products.filter((product) =>
+      product.name.toLowerCase().includes(value)
     );
+  }, [products, search]);
 
-    alert("تم حفظ إعدادات المتجر");
+  function handleChange(
+    field: keyof Product,
+    value: string
+  ) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
   }
 
-  function openAddProduct() {
-    setEditingId(null);
+  function startEdit(index: number) {
+    const product = products[index];
 
-    setNewProduct({
-      name: "",
-      price: "",
-      oldPrice: "",
-      image: "",
-      tag: "جديد",
+    setForm({
+      name: product.name || "",
+      price: product.price || "",
+      oldPrice: product.oldPrice || "",
+      image: product.image || "",
+      badge: product.badge || "",
     });
 
-    setShowProductForm(true);
+    setEditingIndex(index);
+    setMessage("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function openEditProduct(product: Product) {
-    setEditingId(product.id);
-
-    setNewProduct({
-      name: product.name,
-      price: product.price,
-      oldPrice: product.oldPrice,
-      image: product.image,
-      tag: product.tag,
-    });
-
-    setShowProductForm(true);
+  function cancelEdit() {
+    setEditingIndex(null);
+    setForm(emptyProduct);
+    setMessage("");
   }
 
   function saveProduct() {
-    if (!newProduct.name || !newProduct.price) {
-      alert("أدخل اسم المنتج والسعر");
+    if (!form.name.trim()) {
+      setMessage("اكتب اسم المنتج أولًا");
       return;
     }
 
-    if (editingId
+    if (!form.price.trim()) {
+      setMessage("اكتب سعر المنتج");
+      return;
+    }
+
+    if (editingIndex === null) {
+      setProducts((current) => [...current, form]);
+      setMessage("تمت إضافة المنتج إلى القائمة");
+    } else {
+      setProducts((current) =>
+        current.map((product, index) =>
+          index === editingIndex ? form : product
+        )
+      );
+
+      setMessage("تم تعديل المنتج");
+    }
+
+    setForm(emptyProduct);
+    setEditingIndex(null);
+  }
+
+  function deleteProduct(index: number) {
+    const product = products[index];
+
+    const confirmed = window.confirm(
+      `هل تريد حذف "${product.name}"؟`
+    );
+
+    if (!confirmed) return;
+
+    setProducts((current) =>
+      current.filter((_, productIndex) => productIndex !== index)
+    );
+
+    setMessage("تم حذف المنتج من القائمة");
+  }
+
+  return (
+    <main
+      dir="rtl"
+      className="min-h-screen bg-gray-100 text-gray-900"
+    >
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b bg-white shadow-sm">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
+          <div>
+            <h1 className="text-xl font-bold">
+              لوحة تحكم متجر رافيك
+            </h1>
+
+            <p className="mt-1 text-sm text-gray-500">
+              إدارة المنتجات والأسعار والعروض
+            </p>
+          </div>
+
+          <a
+            href="/"
+            className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold transition hover:bg-gray-50"
+          >
+            مشاهدة المتجر
+          </a>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-7xl px-4 py-6">
+        {/* Statistics */}
+        <section className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div className="rounded-2xl bg-white p-5 shadow-sm">
+            <p className="text-sm text-gray-500">المنتجات</p>
+            <p className="mt-2 text-3xl font-bold">
+              {products.length}
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-sm">
+            <p className="text-sm text-gray-500">العروض</p>
+            <p className="mt-2 text-3xl font-bold">
+              {products.filter((p) => p.oldPrice).length}
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-sm">
+            <p className="text-sm text-gray-500">منتجات عليها شارة</p>
+            <p className="mt-2 text-3xl font-bold">
+              {products.filter((p) => p.badge).length}
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-sm">
+            <p className="text-sm text-gray-500">الحالة</p>
+            <p className="mt-2 font-bold text-green-600">
+              لوحة التحكم
+            </p>
+          </div>
+        </section>
+
+        {/* Product form */}
+        <section className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold">
+                {editingIndex === null
+                  ? "إضافة منتج جديد"
+                  : "تعديل المنتج"}
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                أدخل معلومات المنتج ثم احفظها.
+              </p>
+            </div>
+
+            {editingIndex !== null && (
+              <button
+                onClick={cancelEdit}
+                className="rounded-xl border px-4 py-2 text-sm"
+              >
+                إلغاء التعديل
+              </button>
+            )}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                اسم المنتج
+              </label>
+
+              <input
+                value={form.name}
+                onChange={(e) =>
+                  handleChange("name", e.target.value)
+                }
+                placeholder="مثال: سماعات لاسلكية"
+                className="w-full rounded-xl border px-4 py-3 outline-none focus:border-black"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                السعر
+              </label>
+
+              <input
+                value={form.price}
+                onChange={(e) =>
+                  handleChange("price", e.target.value)
+                }
+                placeholder="مثال: 899"
+                className="w-full rounded-xl border px-4 py-3 outline-none focus:border-black"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                السعر القديم
+              </label>
+
+              <input
+                value={form.oldPrice}
+                onChange={(e) =>
+                  handleChange("oldPrice", e.target.value)
+                }
+                placeholder="مثال: 1199"
+                className="w-full rounded-xl border px-4 py-3 outline-none focus:border-black"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                الشارة
+              </label>
+
+              <input
+                value={form.badge}
+                onChange={(e) =>
+                  handleChange("badge", e.target.value)
+                }
+                placeholder="مثال: عرض خاص"
+                className="w-full rounded-xl border px-4 py-3 outline-none focus:border-black"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="mb-2 block text-sm font-semibold">
+                رابط
