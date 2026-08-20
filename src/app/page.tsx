@@ -13,7 +13,7 @@ import {
   Zap,
   Sparkles,
 } from "lucide-react";
-
+import { products } from "./products";
 const categories = [
   { name: "إلكترونيات", icon: "📱" },
   { name: "المنزل والمطبخ", icon: "🏠" },
