@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { formatPrice } from "@/lib/utils";
 
 export default async function AdminDashboard() {
-const supabase = await createClient();
+  const supabase = createClient();
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -36,9 +37,10 @@ const supabase = await createClient();
     .from("products")
     .select("*", { count: "exact", head: true });
 
-  const totalRevenue = orders
-    ?.filter((o) => o.status !== "cancelled")
-    .reduce((sum, o) => sum + Number(o.total), 0) ?? 0;
+  const totalRevenue =
+    orders
+      ?.filter((o) => o.status !== "cancelled")
+      .reduce((sum, o) => sum + Number(o.total), 0) ?? 0;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
@@ -46,6 +48,7 @@ const supabase = await createClient();
         <h1 className="font-display text-3xl font-bold text-rafik-navy">
           لوحة التحكم
         </h1>
+
         <a href="/admin/products" className="btn-outline">
           إدارة المنتجات
         </a>
@@ -53,20 +56,37 @@ const supabase = await createClient();
 
       <div className="mb-10 grid gap-4 sm:grid-cols-3">
         <div className="card p-6">
-          <p className="text-sm text-rafik-navy/60">إجمالي الطلبات</p>
-          <p className="mt-1 text-2xl font-bold text-rafik-navy">{orders?.length ?? 0}</p>
+          <p className="text-sm text-rafik-navy/60">
+            إجمالي الطلبات
+          </p>
+          <p className="mt-1 text-2xl font-bold text-rafik-navy">
+            {orders?.length ?? 0}
+          </p>
         </div>
+
         <div className="card p-6">
-          <p className="text-sm text-rafik-navy/60">المنتجات</p>
-          <p className="mt-1 text-2xl font-bold text-rafik-navy">{productCount ?? 0}</p>
+          <p className="text-sm text-rafik-navy/60">
+            المنتجات
+          </p>
+          <p className="mt-1 text-2xl font-bold text-rafik-navy">
+            {productCount ?? 0}
+          </p>
         </div>
+
         <div className="card p-6">
-          <p className="text-sm text-rafik-navy/60">إجمالي المبيعات</p>
-          <p className="mt-1 text-2xl font-bold text-rafik-navy">{formatPrice(totalRevenue)}</p>
+          <p className="text-sm text-rafik-navy/60">
+            إجمالي المبيعات
+          </p>
+          <p className="mt-1 text-2xl font-bold text-rafik-navy">
+            {formatPrice(totalRevenue)}
+          </p>
         </div>
       </div>
 
-      <h2 className="mb-4 font-display text-xl font-bold text-rafik-navy">آخر الطلبات</h2>
+      <h2 className="mb-4 font-display text-xl font-bold text-rafik-navy">
+        آخر الطلبات
+      </h2>
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -77,13 +97,28 @@ const supabase = await createClient();
               <th className="py-2 text-start">المجموع</th>
             </tr>
           </thead>
+
           <tbody>
             {orders?.map((o) => (
-              <tr key={o.id} className="border-b border-rafik-navy/5">
-                <td className="py-3 font-semibold text-rafik-navy">{o.order_number}</td>
-                <td className="py-3">{o.customer_name}</td>
-                <td className="py-3">{o.status}</td>
-                <td className="py-3">{formatPrice(o.total)}</td>
+              <tr
+                key={o.id}
+                className="border-b border-rafik-navy/5"
+              >
+                <td className="py-3 font-semibold text-rafik-navy">
+                  {o.order_number}
+                </td>
+
+                <td className="py-3">
+                  {o.customer_name}
+                </td>
+
+                <td className="py-3">
+                  {o.status}
+                </td>
+
+                <td className="py-3">
+                  {formatPrice(o.total)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -91,7 +126,8 @@ const supabase = await createClient();
       </div>
 
       <p className="mt-6 text-xs text-rafik-navy/40">
-        باش تدير حساب admin: بدّل role ديال profile فـ Supabase table editor لـ &quot;admin&quot;.
+        باش تدير حساب admin: بدّل role ديال profile فـ Supabase table
+        editor لـ &quot;admin&quot;.
       </p>
     </div>
   );
