@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatPrice } from "@/lib/utils";
 
 export default async function AdminDashboard() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const {
     data: { user },
@@ -126,8 +126,7 @@ export default async function AdminDashboard() {
       </div>
 
       <p className="mt-6 text-xs text-rafik-navy/40">
-        باش تدير حساب admin: بدّل role ديال profile فـ Supabase table
-        editor لـ &quot;admin&quot;.
+        باش تدير حساب admin بدل role ديال profile ف Supabase table editor لـ "admin".
       </p>
     </div>
   );
