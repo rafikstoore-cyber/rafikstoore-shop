@@ -1,12 +1,22 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Cairo, Playfair_Display } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const cairo = Cairo({
+  subsets: ["arabic", "latin"],
+  variable: "--font-body",
+  weight: ["400", "500", "600", "700"],
+});
+
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-display",
+  weight: ["600", "700"],
+});
 
 export const metadata: Metadata = {
   title: "RAFIK STORE - متجر إلكتروني",
-  description: "متجر RAFIK STORE - أفضل المنتجات بأفضل الأسعار",
+  description: "أفضل المنتجات بأفضل الأسعار - متجر RAFIK STORE",
 };
 
 export default function RootLayout({
@@ -16,7 +26,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={inter.className}>{children}</body>
+      <body className={`${cairo.variable} ${playfair.variable} font-body`}>
+        {children}
+      </body>
     </html>
   );
 }
