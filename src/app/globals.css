@@ -2,37 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --foreground-rgb: 26, 26, 26;
-  --background-rgb: 250, 247, 240;
+@layer base {
+  :root {
+    --radius: 0.5rem;
+  }
+
+  body {
+    @apply bg-rafik-cream text-rafik-ink;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-rafik-navy font-display font-semibold;
+  }
 }
 
-body {
-  color: rgb(var(--foreground-rgb));
-  background-color: rgb(var(--background-rgb));
-}
+@layer components {
+  /* Primary button - navy */
+  .btn-primary {
+    @apply bg-rafik-navy text-white px-6 py-3 rounded-md font-medium
+           hover:bg-rafik-blue transition-colors duration-200;
+  }
 
-* {
-  box-sizing: border-box;
-}
+  /* Gold accent button */
+  .btn-accent {
+    @apply bg-rafik-gold text-rafik-navy px-6 py-3 rounded-md font-semibold
+           hover:bg-rafik-goldLight transition-colors duration-200;
+  }
 
-html {
-  scroll-behavior: smooth;
-}
+  /* Outline button */
+  .btn-outline {
+    @apply border-2 border-rafik-navy text-rafik-navy px-6 py-3 rounded-md font-medium
+           hover:bg-rafik-navy hover:text-white transition-colors duration-200;
+  }
 
-/* شريط التمرير بألوان البراند */
-::-webkit-scrollbar {
-  width: 8px;
-}
-::-webkit-scrollbar-track {
-  background: #FAF7F0;
-}
-::-webkit-scrollbar-thumb {
-  background: #C9A24B;
-  border-radius: 4px;
-}
+  /* Product card */
+  .product-card {
+    @apply bg-white rounded-lg shadow-sm border border-rafik-cream
+           hover:shadow-gold transition-shadow duration-300 overflow-hidden;
+  }
 
-/* دعم RTL */
-html[dir="rtl"] body {
-  font-family: var(--font-body), sans-serif;
+  /* Price tag */
+  .price-tag {
+    @apply text-rafik-gold font-bold text-lg font-display;
+  }
+
+  /* Section container */
+  .container-section {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12;
+  }
+
+  /* Gold badge (e.g. "جديد", "خصم") */
+  .badge-gold {
+    @apply bg-rafik-gold text-rafik-navy text-xs font-semibold px-2 py-1 rounded-full;
+  }
 }
