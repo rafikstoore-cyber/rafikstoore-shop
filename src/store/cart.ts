@@ -1,120 +1,87 @@
-"use client";
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import type { Product } from "@/types/database";
 
-import Image from "next/image";
-import Link from "next/link";
-import { ShoppingBag, Heart } from "lucide-react";
-import { useCartStore } from "@/store/cart";
-import { useWishlistStore } from "@/store/wishlist";
-
-export interface Product {
-  id: string;
-  slug: string;
+export interface CartItem {
+  productId: string;
   name: string;
+  image: string | null;
   price: number;
-  compare_at_price?: number | null;
-  image_url: string;
+  quantity: number;
   stock: number;
 }
 
-interface ProductCardProps {
-  product: Product;
+interface CartState {
+  items: CartItem[];
+  addItem: (product: Product, quantity?: number) => void;
+  removeItem: (productId: string) => void;
+  updateQuantity: (productId: string, quantity: number) => void;
+  clearCart: () => void;
+  subtotal: () => number;
+  totalItems: () => number;
 }
 
-export default function ProductCard({ product }: ProductCardProps) {
-  const addItem = useCartStore((state) => state.addItem);
-  const toggleWishlist = useWishlistStore((state) => state.toggleItem);
-  const isWishlisted = useWishlistStore((state) =>
-    state.items.some((item) => item.id === product.id)
-  );
+export const useCartStore = create<CartState>()(
+  persist(
+    (set, get) => ({
+      items: [],
 
-  const isOutOfStock = product.stock <= 0;
-  const hasDiscount =
-    product.compare_at_price && product.compare_at_price > product.price;
-  const discountPercent = hasDiscount
-    ? Math.round(
-        ((product.compare_at_price! - product.price) /
-          product.compare_at_price!) *
-          100
-      )
-    : 0;
+      addItem: (product, quantity = 1) => {
+        const existing = get().items.find(
+          (item) => item.productId === product.id
+        );
 
-  const handleAddToCart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (isOutOfStock) return;
-    addItem({
-      id: product.id,
-      name: product.name,
-      price: product.price,
-      image_url: product.image_url,
-      quantity: 1,
-    });
-  };
+        if (existing) {
+          set({
+            items: get().items.map((item) =>
+              item.productId === product.id
+                ? { ...item, quantity: item.quantity + quantity }
+                : item
+            ),
+          });
+        } else {
+          set({
+            items: [
+              ...get().items,
+              {
+                productId: product.id,
+                name: product.name,
+                image: product.images?.[0] ?? null,
+                price: product.price,
+                quantity,
+                stock: product.stock,
+              },
+            ],
+          });
+        }
+      },
 
-  const handleWishlistClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    toggleWishlist(product);
-  };
+      removeItem: (productId) => {
+        set({
+          items: get().items.filter((item) => item.productId !== productId),
+        });
+      },
 
-  return (
-    <Link href={`/products/${product.slug}`} className="product-card group block">
-      <div className="relative aspect-square overflow-hidden bg-rafik-cream">
-        <Image
-          src={product.image_url}
-          alt={product.name}
-          fill
-          className="object-cover group-hover:scale-105 transition-transform duration-300"
-          sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
-        />
+      updateQuantity: (productId, quantity) => {
+        if (quantity <= 0) {
+          get().removeItem(productId);
+          return;
+        }
+        set({
+          items: get().items.map((item) =>
+            item.productId === productId ? { ...item, quantity } : item
+          ),
+        });
+      },
 
-        {hasDiscount && (
-          <span className="badge-gold absolute top-2 right-2">
-            خصم {discountPercent}%
-          </span>
-        )}
+      clearCart: () => set({ items: [] }),
 
-        {isOutOfStock && (
-          <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-            <span className="text-rafik-navy font-semibold text-sm">
-              نفذت الكمية
-            </span>
-          </div>
-        )}
+      subtotal: () =>
+        get().items.reduce((sum, item) => sum + item.price * item.quantity, 0),
 
-        <button
-          onClick={handleWishlistClick}
-          className="absolute top-2 left-2 bg-white/90 p-2 rounded-full hover:bg-white transition-colors"
-          aria-label="أضف للمفضلة"
-        >
-          <Heart
-            size={18}
-            className={isWishlisted ? "fill-rafik-gold text-rafik-gold" : "text-rafik-navy"}
-          />
-        </button>
-      </div>
-
-      <div className="p-4 space-y-2">
-        <h3 className="text-sm font-medium text-rafik-ink line-clamp-2">
-          {product.name}
-        </h3>
-
-        <div className="flex items-center gap-2">
-          <span className="price-tag">{product.price} جنيه</span>
-          {hasDiscount && (
-            <span className="text-xs text-gray-400 line-through">
-              {product.compare_at_price} جنيه
-            </span>
-          )}
-        </div>
-
-        <button
-          onClick={handleAddToCart}
-          disabled={isOutOfStock}
-          className="btn-accent w-full flex items-center justify-center gap-2 text-sm py-2 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <ShoppingBag size={16} />
-          {isOutOfStock ? "نفذت الكمية" : "زيد للسلة"}
-        </button>
-      </div>
-    </Link>
-  );
-}
+      totalItems: () =>
+        get().items.reduce((sum, item) => sum + item.quantity, 0),
+    }),
+    { name: "rafik-cart-storage" }
+  )
+);
