@@ -1,24 +1,24 @@
 import type { Metadata } from "next";
-import { Cairo, Playfair_Display } from "next/font/google";
-import "./globals.css";
+import { Playfair_Display, Inter } from "next/font/google";
 import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
-
-const cairo = Cairo({
-  subsets: ["arabic", "latin"],
-  variable: "--font-body",
-  weight: ["400", "500", "600", "700"],
-});
+import "./globals.css";
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
   variable: "--font-display",
-  weight: ["600", "700"],
+  display: "swap",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-body",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "RAFIK STORE - متجر إلكتروني",
-  description: "أفضل المنتجات بأفضل الأسعار - متجر RAFIK STORE",
+  title: "RAFIK STOORE | منتجات العناية والجمال",
+  description:
+    "متجر رفيق ستور — منتجات العناية بالبشرة والجمال، الدفع عند الاستلام.",
 };
 
 export default function RootLayout({
@@ -28,10 +28,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={`${cairo.variable} ${playfair.variable} font-body flex flex-col min-h-screen`}>
+      <body className={`${playfair.variable} ${inter.variable} font-body`}>
         <Header />
-        <main className="flex-grow">{children}</main>
-        <Footer />
+        <main className="min-h-screen">{children}</main>
+        {/* Footer غادي يتزاد ملي نديروه */}
       </body>
     </html>
   );
