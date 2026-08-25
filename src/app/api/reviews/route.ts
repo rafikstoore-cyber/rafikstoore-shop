@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const {
     data: { user },
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const productId = req.nextUrl.searchParams.get("product_id");
 
   if (!productId) {
@@ -108,5 +108,3 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ reviews: data });
 }
-
-
