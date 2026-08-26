@@ -49,7 +49,8 @@ export default function AdminLoginPage() {
       return;
     }
 
-    router.push("/admin/dashboard");
+    - router.push("/admin/dashboard");
++ router.push("/admin");
   }
 
   return (
