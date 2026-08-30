@@ -15,7 +15,7 @@ const categories = [
 
 export default async function Home() {
   const supabase = await createClient();
-  const { data: products } = await supabase
+  const { data: products, error } = await supabase
     .from("products")
     .select("*")
     .limit(8)
@@ -139,7 +139,12 @@ export default async function Home() {
             </div>
           </div>
 
-          {products && products.length > 0 ? (
+          {error ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-10 text-center">
+              <p className="font-bold text-red-600">تعذّر تحميل المنتجات</p>
+              <p className="mt-1 text-sm text-red-500">{error.message}</p>
+            </div>
+          ) : products && products.length > 0 ? (
             <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
               {products.map((product) => (
                 <ProductCard key={product.id} product={product} />
