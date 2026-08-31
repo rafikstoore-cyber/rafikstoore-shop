@@ -1,38 +1,48 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { createClient } from "@/lib/supabase/client";
+import { useSearchParams } from "next/navigation";
 import {
   Plus,
   Search,
   Pencil,
   Trash2,
+  Filter,
+  X,
+  Package,
   AlertTriangle,
   CheckCircle2,
   XCircle,
   RefreshCw,
   Box,
+  Tag,
+  ArrowUpDown,
+  ChevronDown,
   ShoppingBag,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { formatPrice } from "@/lib/utils";
+
+// ─────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────
 
 interface Product {
   id: string;
   name_ar: string;
-  name_en?: string | null;
   price: number;
   stock: number;
   is_active: boolean;
   images: string[] | null;
   category_id?: string | null;
-  slug?: string | null;
-  created_at: string;
-  updated_at: string;
   category?: {
     name_ar: string;
   } | null;
+  slug?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface Category {
@@ -48,46 +58,111 @@ interface KPIData {
   outOfStock: number;
 }
 
-const supabase = createClient();
+type SortField =
+  | "name_ar"
+  | "price"
+  | "stock"
+  | "created_at"
+  | "updated_at";
 
-function ProductImage({
-  src,
-  alt,
-}: {
-  src: string | null;
-  alt: string;
-}) {
-  if (!src) {
-    return (
-      <div className="w-14 h-14 rounded-xl bg-[#F5F0E8] flex items-center justify-center">
-        <Box className="w-6 h-6 text-[#C9A24B]" />
-      </div>
-    );
-  }
+type SortOrder = "asc" | "desc";
 
+type StatusFilter =
+  | "all"
+  | "active"
+  | "inactive"
+  | "low_stock"
+  | "out_of_stock";
+
+// ─────────────────────────────────────────────
+// Skeletons
+// ─────────────────────────────────────────────
+
+function SkeletonCard() {
   return (
-    <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-[#F5F0E8]">
-      <Image
-        src={src}
-        alt={alt}
-        fill
-        sizes="56px"
-        className="object-cover"
-      />
+    <div className="bg-white rounded-xl border border-[#0B1E3D]/5 p-4 animate-pulse">
+      <div className="flex gap-4">
+        <div className="w-20 h-20 bg-[#0B1E3D]/5 rounded-lg shrink-0" />
+
+        <div className="flex-1 space-y-3">
+          <div className="h-4 bg-[#0B1E3D]/5 rounded w-3/4" />
+          <div className="h-3 bg-[#0B1E3D]/5 rounded w-1/2" />
+
+          <div className="flex gap-2">
+            <div className="h-3 bg-[#0B1E3D]/5 rounded w-16" />
+            <div className="h-3 bg-[#0B1E3D]/5 rounded w-16" />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
+function SkeletonKPI() {
+  return (
+    <div className="bg-white rounded-xl border border-[#0B1E3D]/5 p-5 animate-pulse">
+      <div className="flex items-center justify-between mb-3">
+        <div className="h-10 w-10 bg-[#0B1E3D]/5 rounded-lg" />
+      </div>
+
+      <div className="h-7 w-16 bg-[#0B1E3D]/5 rounded mb-2" />
+      <div className="h-3 w-20 bg-[#0B1E3D]/5 rounded" />
+    </div>
+  );
+}
+
+function SkeletonTableRow() {
+  return (
+    <tr className="animate-pulse">
+      <td className="py-4 px-4">
+        <div className="h-12 w-12 bg-[#0B1E3D]/5 rounded-lg" />
+      </td>
+
+      <td className="py-4 px-4">
+        <div className="h-4 bg-[#0B1E3D]/5 rounded w-32" />
+      </td>
+
+      <td className="py-4 px-4">
+        <div className="h-4 bg-[#0B1E3D]/5 rounded w-20" />
+      </td>
+
+      <td className="py-4 px-4">
+        <div className="h-4 bg-[#0B1E3D]/5 rounded w-20" />
+      </td>
+
+      <td className="py-4 px-4">
+        <div className="h-4 bg-[#0B1E3D]/5 rounded w-12" />
+      </td>
+
+      <td className="py-4 px-4">
+        <div className="h-6 bg-[#0B1E3D]/5 rounded w-20" />
+      </td>
+
+      <td className="py-4 px-4">
+        <div className="h-4 bg-[#0B1E3D]/5 rounded w-20" />
+      </td>
+
+      <td className="py-4 px-4">
+        <div className="h-8 bg-[#0B1E3D]/5 rounded w-20" />
+      </td>
+    </tr>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Status Badge
+// ─────────────────────────────────────────────
+
 function StatusBadge({
-  active,
   stock,
+  isActive,
 }: {
-  active: boolean;
   stock: number;
+  isActive: boolean;
 }) {
-  if (!active) {
+  if (!isActive) {
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 text-xs">
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
         <XCircle className="w-3 h-3" />
         غير نشط
       </span>
@@ -96,7 +171,7 @@ function StatusBadge({
 
   if (stock === 0) {
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 text-red-700 text-xs">
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-100">
         <XCircle className="w-3 h-3" />
         نفد المخزون
       </span>
@@ -105,7 +180,7 @@ function StatusBadge({
 
   if (stock <= 5) {
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 text-xs">
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 text-orange-700 border border-orange-100">
         <AlertTriangle className="w-3 h-3" />
         مخزون منخفض
       </span>
@@ -113,14 +188,314 @@ function StatusBadge({
   }
 
   return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-xs">
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-100">
       <CheckCircle2 className="w-3 h-3" />
       نشط
     </span>
   );
 }
 
-export default function AdminProductsPage() {
+// ─────────────────────────────────────────────
+// Product Image
+// ─────────────────────────────────────────────
+
+function ProductImage({
+  src,
+  alt,
+}: {
+  src: string | null;
+  alt: string;
+}) {
+  if (src) {
+    return (
+      <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-[#F5F0E8] shrink-0">
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          className="object-cover"
+          sizes="48px"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-12 h-12 rounded-lg bg-[#F5F0E8] flex items-center justify-center shrink-0">
+      <Box className="w-5 h-5 text-[#C9A24B]/60" />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Delete Modal
+// ─────────────────────────────────────────────
+
+function DeleteModal({
+  product,
+  onClose,
+  onConfirm,
+  isDeleting,
+}: {
+  product: Product | null;
+  onClose: () => void;
+  onConfirm: () => void;
+  isDeleting: boolean;
+}) {
+  if (!product) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={isDeleting ? undefined : onClose}
+      />
+
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-[#0B1E3D]/10">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+            <Trash2 className="w-5 h-5 text-red-600" />
+          </div>
+
+          <div>
+            <h3 className="text-lg font-bold text-[#0B1E3D]">
+              حذف المنتج
+            </h3>
+
+            <p className="text-sm text-gray-500">
+              هذا الإجراء لا يمكن التراجع عنه
+            </p>
+          </div>
+        </div>
+
+        <p className="text-[#0B1E3D] mb-6 leading-relaxed">
+          هل أنت متأكد من حذف المنتج{" "}
+          <span className="font-bold">
+            "{product.name_ar}"
+          </span>
+          ؟
+          <br />
+
+          <span className="text-sm text-gray-500">
+            سيتم حذف المنتج نهائيًا من قاعدة البيانات.
+          </span>
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={isDeleting}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-[#0B1E3D]/10 text-[#0B1E3D] font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            إلغاء
+          </button>
+
+          <button
+            onClick={onConfirm}
+            disabled={isDeleting}
+            className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {isDeleting ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
+
+            {isDeleting ? "جارٍ الحذف..." : "حذف نهائي"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Mobile Product Card
+// ─────────────────────────────────────────────
+
+function MobileProductCard({
+  product,
+  onDeleteClick,
+  onToggleStatus,
+  isToggling,
+}: {
+  product: Product;
+  onDeleteClick: (product: Product) => void;
+  onToggleStatus: (id: string, currentStatus: boolean) => void;
+  isToggling: string | null;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-[#0B1E3D]/5 p-4 hover:shadow-md transition-shadow">
+      <div className="flex gap-3 mb-3">
+        <ProductImage
+          src={product.images?.[0] || null}
+          alt={product.name_ar}
+        />
+
+        <div className="flex-1 min-w-0">
+          <h3
+            className="font-bold text-[#0B1E3D] text-sm leading-tight truncate"
+            dir="rtl"
+          >
+            {product.name_ar}
+          </h3>
+
+          <p className="text-xs text-gray-400 mt-0.5">
+            {product.category?.name_ar || "بدون تصنيف"}
+          </p>
+        </div>
+
+        <StatusBadge
+          stock={product.stock}
+          isActive={product.is_active}
+        />
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+        <div className="bg-[#F5F0E8]/50 rounded-lg p-2">
+          <p className="text-[10px] text-gray-400 mb-0.5">
+            السعر
+          </p>
+
+          <p className="text-sm font-bold text-[#0B1E3D]">
+            {formatPrice(product.price)}
+          </p>
+        </div>
+
+        <div className="bg-[#F5F0E8]/50 rounded-lg p-2">
+          <p className="text-[10px] text-gray-400 mb-0.5">
+            المخزون
+          </p>
+
+          <p
+            className={`text-sm font-bold ${
+              product.stock === 0
+                ? "text-red-600"
+                : product.stock <= 5
+                ? "text-orange-600"
+                : "text-[#0B1E3D]"
+            }`}
+          >
+            {product.stock}
+          </p>
+        </div>
+
+        <div className="bg-[#F5F0E8]/50 rounded-lg p-2">
+          <p className="text-[10px] text-gray-400 mb-0.5">
+            التحديث
+          </p>
+
+          <p className="text-sm font-bold text-[#0B1E3D]">
+            {new Date(product.updated_at).toLocaleDateString(
+              "ar-SA",
+              {
+                month: "short",
+                day: "numeric",
+              }
+            )}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <Link
+          href={`/admin/products/${product.id}`}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#0B1E3D] text-white text-xs font-medium hover:bg-[#0B1E3D]/90 transition-colors"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+          تعديل
+        </Link>
+
+        <button
+          onClick={() =>
+            onToggleStatus(
+              product.id,
+              product.is_active
+            )
+          }
+          disabled={isToggling === product.id}
+          className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
+            product.is_active
+              ? "border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100"
+              : "border-green-200 text-green-700 bg-green-50 hover:bg-green-100"
+          } disabled:opacity-50`}
+        >
+          {isToggling === product.id ? (
+            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+          ) : product.is_active ? (
+            <XCircle className="w-3.5 h-3.5" />
+          ) : (
+            <CheckCircle2 className="w-3.5 h-3.5" />
+          )}
+
+          {product.is_active ? "تعطيل" : "تفعيل"}
+        </button>
+
+        <button
+          onClick={() => onDeleteClick(product)}
+          className="flex items-center justify-center px-3 py-2 rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
+          aria-label="حذف المنتج"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// KPI Card
+// ─────────────────────────────────────────────
+
+function KPICard({
+  icon: Icon,
+  label,
+  value,
+  color,
+  bgColor,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: number;
+  color: string;
+  bgColor: string;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-[#0B1E3D]/5 p-5 hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between mb-3">
+        <div
+          className="w-10 h-10 rounded-lg flex items-center justify-center"
+          style={{
+            backgroundColor: bgColor,
+          }}
+        >
+          <Icon
+            className="w-5 h-5"
+            style={{
+              color,
+            }}
+          />
+        </div>
+      </div>
+
+      <p className="text-2xl font-bold text-[#0B1E3D] mb-1">
+        {value.toLocaleString("ar-SA")}
+      </p>
+
+      <p className="text-sm text-gray-500">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Main Content
+// ─────────────────────────────────────────────
+
+function AdminProductsContent() {
+  const searchParams = useSearchParams();
+
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [kpi, setKpi] = useState<KPIData | null>(null);
@@ -128,85 +503,83 @@ export default function AdminProductsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
-  const [status, setStatus] = useState("all");
+  const [searchQuery, setSearchQuery] = useState(
+    searchParams.get("q") || ""
+  );
 
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [toggling, setToggling] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] =
+    useState<StatusFilter>(
+      (searchParams.get("status") as StatusFilter) || "all"
+    );
 
-  const loadProducts = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const [categoryFilter, setCategoryFilter] =
+    useState(
+      searchParams.get("category") || "all"
+    );
 
+  const [sortField, setSortField] =
+    useState<SortField>(
+      (searchParams.get("sort") as SortField) ||
+        "updated_at"
+    );
+
+  const [sortOrder, setSortOrder] =
+    useState<SortOrder>(
+      (searchParams.get("order") as SortOrder) ||
+        "desc"
+    );
+
+  const [deleteModalProduct, setDeleteModalProduct] =
+    useState<Product | null>(null);
+
+  const [isDeleting, setIsDeleting] =
+    useState(false);
+
+  const [isToggling, setIsToggling] =
+    useState<string | null>(null);
+
+  const [showFilters, setShowFilters] =
+    useState(false);
+
+  // Create client once.
+  const [supabase] = useState(() =>
+    createClient()
+  );
+
+  // ─────────────────────────────────────────────
+  // Fetch Data
+  // ─────────────────────────────────────────────
+
+  const fetchData = useCallback(async () => {
     try {
-      console.log("=== ADMIN PRODUCTS DEBUG START ===");
+      setLoading(true);
+      setError(null);
 
-      // ------------------------------------------------
-      // 1. AUTH CHECK
-      // ------------------------------------------------
-
+      // Categories
       const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      console.log("AUTH USER:", user);
-      console.log("AUTH ERROR:", authError);
-
-      if (authError) {
-        throw new Error(
-          `AUTH ERROR: ${authError.message}`
-        );
-      }
-
-      if (!user) {
-        throw new Error(
-          "AUTH ERROR: لا توجد جلسة مستخدم في المتصفح."
-        );
-      }
-
-      // ------------------------------------------------
-      // 2. CATEGORIES
-      // ------------------------------------------------
-
-      console.log("STEP 1: loading categories...");
-
-      const {
-        data: categoriesData,
+        data: catsData,
         error: categoriesError,
       } = await supabase
         .from("categories")
         .select("id, name_ar")
-        .order("name_ar", { ascending: true });
-
-      console.log("CATEGORIES DATA:", categoriesData);
-      console.log("CATEGORIES ERROR:", categoriesError);
+        .order("name_ar", {
+          ascending: true,
+        });
 
       if (categoriesError) {
         throw new Error(
-          `CATEGORIES ERROR: ${categoriesError.message} | code=${categoriesError.code}`
+          `CATEGORIES ERROR: ${categoriesError.message}`
         );
       }
 
-      setCategories(categoriesData || []);
+      setCategories(catsData || []);
 
-      // ------------------------------------------------
-      // 3. PRODUCTS
-      // ------------------------------------------------
-
-      console.log("STEP 2: loading products...");
-
-      const {
-        data: productsData,
-        error: productsError,
-      } = await supabase
+      // Products
+      let query = supabase
         .from("products")
         .select(`
           id,
           name_ar,
-          name_en,
           price,
           stock,
           is_active,
@@ -215,623 +588,1359 @@ export default function AdminProductsPage() {
           slug,
           created_at,
           updated_at,
-          category:categories (
-            name_ar
-          )
-        `)
-        .order("updated_at", { ascending: false });
+          category:categories(name_ar)
+        `);
 
-      console.log("PRODUCTS DATA:", productsData);
-      console.log("PRODUCTS ERROR:", productsError);
-
-      if (productsError) {
-        throw new Error(
-          `PRODUCTS ERROR: ${productsError.message} | code=${productsError.code} | details=${productsError.details || ""} | hint=${productsError.hint || ""}`
+      // Category filter
+      if (categoryFilter !== "all") {
+        query = query.eq(
+          "category_id",
+          categoryFilter
         );
       }
 
-      const normalizedProducts: Product[] =
-        (productsData || []).map((product: any) => ({
-          ...product,
-          category: product.category || null,
-        }));
+      // Status filter
+      if (statusFilter === "active") {
+        query = query.eq(
+          "is_active",
+          true
+        );
+      }
 
-      setProducts(normalizedProducts);
+      if (statusFilter === "inactive") {
+        query = query.eq(
+          "is_active",
+          false
+        );
+      }
 
-      // ------------------------------------------------
-      // 4. KPI
-      // ------------------------------------------------
+      if (statusFilter === "low_stock") {
+        query = query
+          .eq("is_active", true)
+          .gt("stock", 0)
+          .lte("stock", 5);
+      }
 
-      console.log("STEP 3: loading KPI...");
+      if (statusFilter === "out_of_stock") {
+        query = query
+          .eq("is_active", true)
+          .eq("stock", 0);
+      }
 
+      // Search ONLY name_ar because name_en
+      // does not exist in the actual database.
+      if (searchQuery.trim()) {
+        const cleanSearch =
+          searchQuery.trim();
+
+        query = query.ilike(
+          "name_ar",
+          `%${cleanSearch}%`
+        );
+      }
+
+      // Sort
+      query = query.order(
+        sortField,
+        {
+          ascending:
+            sortOrder === "asc",
+        }
+      );
+
+      const {
+        data: productsData,
+        error: productsError,
+      } = await query;
+
+      if (productsError) {
+        throw new Error(
+          `PRODUCTS ERROR: ${productsError.message} | code=${productsError.code || ""} | details=${productsError.details || ""} | hint=${productsError.hint || ""}`
+        );
+      }
+
+      const transformed: Product[] =
+        (productsData || []).map(
+          (product: any) => ({
+            id: product.id,
+            name_ar: product.name_ar,
+            price: Number(product.price || 0),
+            stock: Number(product.stock || 0),
+            is_active:
+              Boolean(product.is_active),
+            images:
+              Array.isArray(product.images)
+                ? product.images
+                : null,
+            category_id:
+              product.category_id || null,
+            category:
+              product.category || null,
+            slug: product.slug,
+            created_at:
+              product.created_at,
+            updated_at:
+              product.updated_at,
+          })
+        );
+
+      setProducts(transformed);
+
+      // KPI query
       const {
         data: allProducts,
         error: kpiError,
       } = await supabase
         .from("products")
-        .select("stock, is_active");
-
-      console.log("KPI DATA:", allProducts);
-      console.log("KPI ERROR:", kpiError);
+        .select(
+          "stock, is_active"
+        );
 
       if (kpiError) {
         throw new Error(
-          `KPI ERROR: ${kpiError.message} | code=${kpiError.code}`
+          `KPI ERROR: ${kpiError.message} | code=${kpiError.code || ""}`
         );
       }
 
-      const rows = allProducts || [];
+      const safeProducts =
+        allProducts || [];
 
       setKpi({
-        total: rows.length,
-        active: rows.filter((p) => p.is_active).length,
-        inactive: rows.filter((p) => !p.is_active).length,
-        lowStock: rows.filter(
-          (p) => p.is_active && p.stock > 0 && p.stock <= 5
-        ).length,
-        outOfStock: rows.filter(
-          (p) => p.is_active && p.stock === 0
-        ).length,
-      });
+        total: safeProducts.length,
 
-      console.log("=== ADMIN PRODUCTS DEBUG SUCCESS ===");
+        active: safeProducts.filter(
+          (p) => p.is_active
+        ).length,
+
+        inactive: safeProducts.filter(
+          (p) => !p.is_active
+        ).length,
+
+        lowStock:
+          safeProducts.filter(
+            (p) =>
+              p.is_active &&
+              Number(p.stock) > 0 &&
+              Number(p.stock) <= 5
+          ).length,
+
+        outOfStock:
+          safeProducts.filter(
+            (p) =>
+              p.is_active &&
+              Number(p.stock) === 0
+          ).length,
+      });
     } catch (err: any) {
-      console.error("=== ADMIN PRODUCTS DEBUG FAILED ===");
-      console.error(err);
+      console.error(
+        "Admin Products Error:",
+        err
+      );
 
       setError(
         err?.message ||
-          "حدث خطأ غير معروف أثناء تحميل المنتجات."
+          "تعذر تحميل المنتجات. يرجى المحاولة مرة أخرى."
       );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [
+    supabase,
+    searchQuery,
+    statusFilter,
+    categoryFilter,
+    sortField,
+    sortOrder,
+  ]);
 
   useEffect(() => {
-    loadProducts();
-  }, [loadProducts]);
+    fetchData();
+  }, [fetchData]);
 
-  const filteredProducts = useMemo(() => {
-    let result = [...products];
+  // ─────────────────────────────────────────────
+  // URL
+  // ─────────────────────────────────────────────
 
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
+  useEffect(() => {
+    const params =
+      new URLSearchParams();
 
-      result = result.filter((product) => {
-        return (
-          product.name_ar?.toLowerCase().includes(q) ||
-          product.name_en?.toLowerCase().includes(q)
-        );
-      });
+    if (searchQuery) {
+      params.set("q", searchQuery);
     }
 
-    if (category !== "all") {
-      result = result.filter(
-        (product) => product.category_id === category
+    if (statusFilter !== "all") {
+      params.set(
+        "status",
+        statusFilter
       );
     }
 
-    if (status === "active") {
-      result = result.filter((product) => product.is_active);
-    }
-
-    if (status === "inactive") {
-      result = result.filter((product) => !product.is_active);
-    }
-
-    if (status === "low_stock") {
-      result = result.filter(
-        (product) =>
-          product.is_active &&
-          product.stock > 0 &&
-          product.stock <= 5
+    if (categoryFilter !== "all") {
+      params.set(
+        "category",
+        categoryFilter
       );
     }
 
-    if (status === "out_of_stock") {
-      result = result.filter(
-        (product) =>
-          product.is_active &&
-          product.stock === 0
+    if (sortField !== "updated_at") {
+      params.set(
+        "sort",
+        sortField
       );
     }
 
-    return result;
-  }, [products, search, category, status]);
+    if (sortOrder !== "desc") {
+      params.set(
+        "order",
+        sortOrder
+      );
+    }
 
-  async function toggleStatus(product: Product) {
-    setToggling(product.id);
+    const queryString =
+      params.toString();
+
+    const newUrl =
+      queryString
+        ? `/admin/products?${queryString}`
+        : "/admin/products";
+
+    window.history.replaceState(
+      null,
+      "",
+      newUrl
+    );
+  }, [
+    searchQuery,
+    statusFilter,
+    categoryFilter,
+    sortField,
+    sortOrder,
+  ]);
+
+  // ─────────────────────────────────────────────
+  // Delete
+  // ─────────────────────────────────────────────
+
+  const handleDelete = async () => {
+    if (!deleteModalProduct) {
+      return;
+    }
+
+    setIsDeleting(true);
 
     try {
-      const { error } = await supabase
-        .from("products")
-        .update({
-          is_active: !product.is_active,
-        })
-        .eq("id", product.id);
-
-      if (error) {
-        throw error;
-      }
-
-      setProducts((current) =>
-        current.map((item) =>
-          item.id === product.id
-            ? {
-                ...item,
-                is_active: !product.is_active,
-              }
-            : item
-        )
-      );
-    } catch (err: any) {
-      alert(
-        `فشل تغيير حالة المنتج:\n${err.message}`
-      );
-    } finally {
-      setToggling(null);
-    }
-  }
-
-  async function deleteProduct() {
-    if (!deleteId) return;
-
-    setDeleting(true);
-
-    try {
-      const { error } = await supabase
+      const {
+        error: deleteError,
+      } = await supabase
         .from("products")
         .delete()
-        .eq("id", deleteId);
+        .eq(
+          "id",
+          deleteModalProduct.id
+        );
 
-      if (error) {
-        throw error;
+      if (deleteError) {
+        throw deleteError;
       }
 
-      setProducts((current) =>
-        current.filter((product) => product.id !== deleteId)
+      setProducts((prev) =>
+        prev.filter(
+          (product) =>
+            product.id !==
+            deleteModalProduct.id
+        )
       );
 
-      setDeleteId(null);
+      setDeleteModalProduct(null);
 
-      await loadProducts();
+      await fetchData();
     } catch (err: any) {
+      console.error(
+        "Delete product error:",
+        err
+      );
+
       alert(
-        `فشل حذف المنتج:\n${err.message}`
+        "فشل حذف المنتج: " +
+          (err?.message ||
+            "خطأ غير معروف")
       );
     } finally {
-      setDeleting(false);
+      setIsDeleting(false);
     }
-  }
+  };
 
-  if (loading) {
-    return (
-      <div
-        dir="rtl"
-        className="min-h-screen bg-[#FAFAF8] flex items-center justify-center"
-      >
-        <div className="text-center">
-          <RefreshCw className="w-8 h-8 text-[#C9A24B] animate-spin mx-auto mb-4" />
+  // ─────────────────────────────────────────────
+  // Toggle Active
+  // ─────────────────────────────────────────────
 
-          <h2 className="text-lg font-bold text-[#0B1E3D]">
-            جاري تحميل المنتجات...
-          </h2>
+  const handleToggleStatus = async (
+    id: string,
+    currentStatus: boolean
+  ) => {
+    setIsToggling(id);
 
-          <p className="text-sm text-gray-500 mt-2">
-            يتم الاتصال بقاعدة البيانات
-          </p>
-        </div>
-      </div>
-    );
-  }
+    try {
+      const {
+        error: updateError,
+      } = await supabase
+        .from("products")
+        .update({
+          is_active:
+            !currentStatus,
+        })
+        .eq("id", id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setProducts((prev) =>
+        prev.map((product) =>
+          product.id === id
+            ? {
+                ...product,
+                is_active:
+                  !currentStatus,
+              }
+            : product
+        )
+      );
+
+      setKpi((prev) => {
+        if (!prev) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          active:
+            currentStatus
+              ? Math.max(
+                  0,
+                  prev.active - 1
+                )
+              : prev.active + 1,
+
+          inactive:
+            currentStatus
+              ? prev.inactive + 1
+              : Math.max(
+                  0,
+                  prev.inactive - 1
+                ),
+        };
+      });
+    } catch (err: any) {
+      console.error(
+        "Toggle product error:",
+        err
+      );
+
+      alert(
+        "فشل تغيير حالة المنتج: " +
+          (err?.message ||
+            "خطأ غير معروف")
+      );
+    } finally {
+      setIsToggling(null);
+    }
+  };
+
+  // ─────────────────────────────────────────────
+  // Filters
+  // ─────────────────────────────────────────────
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setCategoryFilter("all");
+    setSortField("updated_at");
+    setSortOrder("desc");
+  };
+
+  const hasFilters =
+    Boolean(searchQuery) ||
+    statusFilter !== "all" ||
+    categoryFilter !== "all";
+
+  const handleSort = (
+    field: SortField
+  ) => {
+    if (sortField === field) {
+      setSortOrder(
+        sortOrder === "asc"
+          ? "desc"
+          : "asc"
+      );
+    } else {
+      setSortField(field);
+      setSortOrder("desc");
+    }
+  };
+
+  // ─────────────────────────────────────────────
+  // Error State
+  // ─────────────────────────────────────────────
 
   if (error) {
     return (
       <div
+        className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4"
         dir="rtl"
-        className="min-h-screen bg-[#FAFAF8] flex items-center justify-center px-4"
       >
-        <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-8 max-w-xl w-full text-center">
-          <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-5">
-            <AlertTriangle className="w-8 h-8 text-red-600" />
-          </div>
-
-          <h1 className="text-xl font-bold text-[#0B1E3D]">
-            فشل الاتصال بالبيانات
-          </h1>
-
-          <p className="text-gray-500 mt-2">
-            الخطأ الحقيقي من Supabase:
-          </p>
-
-          <div
-            dir="ltr"
-            className="mt-5 p-4 rounded-xl bg-red-50 border border-red-100 text-left text-sm text-red-700 whitespace-pre-wrap break-words"
-          >
-            {error}
-          </div>
-
-          <div className="flex gap-3 mt-6">
-            <button
-              onClick={loadProducts}
-              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#0B1E3D] text-white font-medium"
-            >
-              <RefreshCw className="w-4 h-4" />
-              إعادة المحاولة
-            </button>
-
-            <Link
-              href="/admin"
-              className="flex-1 inline-flex items-center justify-center px-4 py-3 rounded-xl border border-[#0B1E3D]/10 text-[#0B1E3D] font-medium"
-            >
-              لوحة التحكم
-            </Link>
-          </div>
+        <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mb-4">
+          <AlertTriangle className="w-8 h-8 text-red-500" />
         </div>
+
+        <h2 className="text-xl font-bold text-[#0B1E3D] mb-2">
+          فشل الاتصال بالبيانات
+        </h2>
+
+        <p className="text-gray-500 mb-6 max-w-xl leading-relaxed break-words">
+          {error}
+        </p>
+
+        <button
+          onClick={fetchData}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B1E3D] text-white font-medium hover:bg-[#0B1E3D]/90 transition-colors"
+        >
+          <RefreshCw className="w-4 h-4" />
+          إعادة المحاولة
+        </button>
       </div>
     );
   }
 
+  // ─────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────
+
   return (
     <div
-      dir="rtl"
       className="min-h-screen bg-[#FAFAF8]"
+      dir="rtl"
     >
-      <header className="bg-white border-b border-[#0B1E3D]/5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+      {/* Header */}
+      <div className="bg-white border-b border-[#0B1E3D]/5">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-[#0B1E3D]">
+              <h1 className="text-2xl sm:text-3xl font-bold text-[#0B1E3D] tracking-tight">
                 إدارة المنتجات
               </h1>
 
               <p className="text-gray-500 mt-1 text-sm">
-                إدارة المنتجات والمخزون والأسعار
+                إدارة مخزونك، تتبع المنتجات،
+                وتحديث الأسعار بكل سهولة
               </p>
             </div>
 
             <Link
               href="/admin/products/new"
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#C9A24B] text-[#0B1E3D] font-bold"
+              className="inline-flex items-center justify-center gap-2 bg-[#C9A24B] hover:bg-[#D4B05F] text-[#0B1E3D] font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm hover:shadow-md active:scale-[0.98] shrink-0"
             >
               <Plus className="w-5 h-5" />
               إضافة منتج
             </Link>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* KPI */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          <div className="bg-white rounded-xl p-5 border border-[#0B1E3D]/5">
-            <p className="text-2xl font-bold text-[#0B1E3D]">
-              {kpi?.total ?? 0}
-            </p>
-            <p className="text-sm text-gray-500 mt-1">
-              إجمالي المنتجات
-            </p>
+        {loading ? (
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+            {Array.from({
+              length: 5,
+            }).map((_, index) => (
+              <SkeletonKPI
+                key={index}
+              />
+            ))}
           </div>
+        ) : kpi ? (
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+            <KPICard
+              icon={Package}
+              label="إجمالي المنتجات"
+              value={kpi.total}
+              color="#0B1E3D"
+              bgColor="#0B1E3D08"
+            />
 
-          <div className="bg-white rounded-xl p-5 border border-[#0B1E3D]/5">
-            <p className="text-2xl font-bold text-green-600">
-              {kpi?.active ?? 0}
-            </p>
-            <p className="text-sm text-gray-500 mt-1">
-              المنتجات النشطة
-            </p>
+            <KPICard
+              icon={CheckCircle2}
+              label="المنتجات النشطة"
+              value={kpi.active}
+              color="#16A34A"
+              bgColor="#16A34A10"
+            />
+
+            <KPICard
+              icon={XCircle}
+              label="غير النشطة"
+              value={kpi.inactive}
+              color="#6B7280"
+              bgColor="#6B728010"
+            />
+
+            <KPICard
+              icon={AlertTriangle}
+              label="مخزون منخفض"
+              value={kpi.lowStock}
+              color="#EA580C"
+              bgColor="#EA580C10"
+            />
+
+            <KPICard
+              icon={XCircle}
+              label="نفد المخزون"
+              value={kpi.outOfStock}
+              color="#DC2626"
+              bgColor="#DC262610"
+            />
           </div>
+        ) : null}
 
-          <div className="bg-white rounded-xl p-5 border border-[#0B1E3D]/5">
-            <p className="text-2xl font-bold text-gray-500">
-              {kpi?.inactive ?? 0}
-            </p>
-            <p className="text-sm text-gray-500 mt-1">
-              غير النشطة
-            </p>
-          </div>
-
-          <div className="bg-white rounded-xl p-5 border border-[#0B1E3D]/5">
-            <p className="text-2xl font-bold text-orange-600">
-              {kpi?.lowStock ?? 0}
-            </p>
-            <p className="text-sm text-gray-500 mt-1">
-              مخزون منخفض
-            </p>
-          </div>
-
-          <div className="bg-white rounded-xl p-5 border border-[#0B1E3D]/5">
-            <p className="text-2xl font-bold text-red-600">
-              {kpi?.outOfStock ?? 0}
-            </p>
-            <p className="text-sm text-gray-500 mt-1">
-              نفد المخزون
-            </p>
-          </div>
-        </div>
-
-        {/* Toolbar */}
+        {/* Search & Filters */}
         <div className="bg-white rounded-xl border border-[#0B1E3D]/5 p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-
-            <div className="relative">
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Search */}
+            <div className="relative flex-1">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
 
               <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="ابحث عن منتج..."
-                className="w-full pr-10 pl-4 py-3 rounded-lg border border-[#0B1E3D]/10 outline-none focus:border-[#C9A24B]"
+                type="text"
+                placeholder="ابحث باسم المنتج..."
+                value={searchQuery}
+                onChange={(e) =>
+                  setSearchQuery(
+                    e.target.value
+                  )
+                }
+                className="w-full pr-10 pl-4 py-2.5 rounded-lg border border-[#0B1E3D]/10 text-sm text-[#0B1E3D] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#C9A24B]/30 focus:border-[#C9A24B] transition-all bg-[#FAFAF8]"
+                dir="rtl"
               />
+
+              {searchQuery && (
+                <button
+                  onClick={() =>
+                    setSearchQuery("")
+                  }
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label="مسح البحث"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="px-4 py-3 rounded-lg border border-[#0B1E3D]/10 bg-white"
+            {/* Mobile filter */}
+            <button
+              onClick={() =>
+                setShowFilters(
+                  !showFilters
+                )
+              }
+              className="sm:hidden flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-[#0B1E3D]/10 text-[#0B1E3D] text-sm font-medium hover:bg-gray-50 transition-colors"
             >
-              <option value="all">
-                كل التصنيفات
-              </option>
+              <Filter className="w-4 h-4" />
+              الفلاتر
 
-              {categories.map((item) => (
-                <option
-                  key={item.id}
-                  value={item.id}
+              {hasFilters && (
+                <span className="w-2 h-2 rounded-full bg-[#C9A24B]" />
+              )}
+            </button>
+
+            {/* Desktop filters */}
+            <div className="hidden sm:flex items-center gap-2">
+              <div className="relative">
+                <select
+                  value={statusFilter}
+                  onChange={(e) =>
+                    setStatusFilter(
+                      e.target
+                        .value as StatusFilter
+                    )
+                  }
+                  className="appearance-none pl-8 pr-3 py-2.5 rounded-lg border border-[#0B1E3D]/10 text-sm text-[#0B1E3D] bg-white focus:outline-none focus:ring-2 focus:ring-[#C9A24B]/30 focus:border-[#C9A24B] cursor-pointer min-w-[130px]"
                 >
-                  {item.name_ar}
-                </option>
-              ))}
-            </select>
+                  <option value="all">
+                    كل الحالات
+                  </option>
 
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="px-4 py-3 rounded-lg border border-[#0B1E3D]/10 bg-white"
-            >
-              <option value="all">
-                كل الحالات
-              </option>
+                  <option value="active">
+                    نشط
+                  </option>
 
-              <option value="active">
-                نشط
-              </option>
+                  <option value="inactive">
+                    غير نشط
+                  </option>
 
-              <option value="inactive">
-                غير نشط
-              </option>
+                  <option value="low_stock">
+                    مخزون منخفض
+                  </option>
 
-              <option value="low_stock">
-                مخزون منخفض
-              </option>
+                  <option value="out_of_stock">
+                    نفد المخزون
+                  </option>
+                </select>
 
-              <option value="out_of_stock">
-                نفد المخزون
-              </option>
-            </select>
+                <ChevronDown className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
 
+              {categories.length > 0 && (
+                <div className="relative">
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) =>
+                      setCategoryFilter(
+                        e.target.value
+                      )
+                    }
+                    className="appearance-none pl-8 pr-3 py-2.5 rounded-lg border border-[#0B1E3D]/10 text-sm text-[#0B1E3D] bg-white focus:outline-none focus:ring-2 focus:ring-[#C9A24B]/30 focus:border-[#C9A24B] cursor-pointer min-w-[130px]"
+                  >
+                    <option value="all">
+                      كل التصنيفات
+                    </option>
+
+                    {categories.map(
+                      (category) => (
+                        <option
+                          key={
+                            category.id
+                          }
+                          value={
+                            category.id
+                          }
+                        >
+                          {
+                            category.name_ar
+                          }
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                  <ChevronDown className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+              )}
+
+              <div className="relative">
+                <select
+                  value={`${sortField}-${sortOrder}`}
+                  onChange={(e) => {
+                    const [
+                      field,
+                      order,
+                    ] =
+                      e.target.value.split(
+                        "-"
+                      );
+
+                    setSortField(
+                      field as SortField
+                    );
+
+                    setSortOrder(
+                      order as SortOrder
+                    );
+                  }}
+                  className="appearance-none pl-8 pr-3 py-2.5 rounded-lg border border-[#0B1E3D]/10 text-sm text-[#0B1E3D] bg-white focus:outline-none focus:ring-2 focus:ring-[#C9A24B]/30 focus:border-[#C9A24B] cursor-pointer min-w-[140px]"
+                >
+                  <option value="updated_at-desc">
+                    الأحدث أولاً
+                  </option>
+
+                  <option value="updated_at-asc">
+                    الأقدم أولاً
+                  </option>
+
+                  <option value="name_ar-asc">
+                    الاسم أ-ي
+                  </option>
+
+                  <option value="name_ar-desc">
+                    الاسم ي-أ
+                  </option>
+
+                  <option value="price-asc">
+                    السعر: الأقل
+                  </option>
+
+                  <option value="price-desc">
+                    السعر: الأعلى
+                  </option>
+
+                  <option value="stock-asc">
+                    المخزون: الأقل
+                  </option>
+
+                  <option value="stock-desc">
+                    المخزون: الأعلى
+                  </option>
+                </select>
+
+                <ArrowUpDown className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
+
+              {hasFilters && (
+                <button
+                  onClick={
+                    clearFilters
+                  }
+                  className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  مسح
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Mobile filters */}
+          {showFilters && (
+            <div className="sm:hidden mt-3 pt-3 border-t border-[#0B1E3D]/5 space-y-3">
+              <div className="relative">
+                <select
+                  value={statusFilter}
+                  onChange={(e) =>
+                    setStatusFilter(
+                      e.target
+                        .value as StatusFilter
+                    )
+                  }
+                  className="w-full appearance-none pl-8 pr-3 py-2.5 rounded-lg border border-[#0B1E3D]/10 text-sm text-[#0B1E3D] bg-white"
+                >
+                  <option value="all">
+                    كل الحالات
+                  </option>
+
+                  <option value="active">
+                    نشط
+                  </option>
+
+                  <option value="inactive">
+                    غير نشط
+                  </option>
+
+                  <option value="low_stock">
+                    مخزون منخفض
+                  </option>
+
+                  <option value="out_of_stock">
+                    نفد المخزون
+                  </option>
+                </select>
+
+                <ChevronDown className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
+
+              {categories.length > 0 && (
+                <div className="relative">
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) =>
+                      setCategoryFilter(
+                        e.target.value
+                      )
+                    }
+                    className="w-full appearance-none pl-8 pr-3 py-2.5 rounded-lg border border-[#0B1E3D]/10 text-sm text-[#0B1E3D] bg-white"
+                  >
+                    <option value="all">
+                      كل التصنيفات
+                    </option>
+
+                    {categories.map(
+                      (category) => (
+                        <option
+                          key={
+                            category.id
+                          }
+                          value={
+                            category.id
+                          }
+                        >
+                          {
+                            category.name_ar
+                          }
+                        </option>
+                      )
+                    )}
+                  </select>
+
+                  <ChevronDown className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+              )}
+
+              <div className="relative">
+                <select
+                  value={`${sortField}-${sortOrder}`}
+                  onChange={(e) => {
+                    const [
+                      field,
+                      order,
+                    ] =
+                      e.target.value.split(
+                        "-"
+                      );
+
+                    setSortField(
+                      field as SortField
+                    );
+
+                    setSortOrder(
+                      order as SortOrder
+                    );
+                  }}
+                  className="w-full appearance-none pl-8 pr-3 py-2.5 rounded-lg border border-[#0B1E3D]/10 text-sm text-[#0B1E3D] bg-white"
+                >
+                  <option value="updated_at-desc">
+                    الأحدث أولاً
+                  </option>
+
+                  <option value="updated_at-asc">
+                    الأقدم أولاً
+                  </option>
+
+                  <option value="name_ar-asc">
+                    الاسم أ-ي
+                  </option>
+
+                  <option value="name_ar-desc">
+                    الاسم ي-أ
+                  </option>
+
+                  <option value="price-asc">
+                    السعر: الأقل
+                  </option>
+
+                  <option value="price-desc">
+                    السعر: الأعلى
+                  </option>
+
+                  <option value="stock-asc">
+                    المخزون: الأقل
+                  </option>
+
+                  <option value="stock-desc">
+                    المخزون: الأعلى
+                  </option>
+                </select>
+
+                <ArrowUpDown className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
+
+              {hasFilters && (
+                <button
+                  onClick={
+                    clearFilters
+                  }
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-sm text-red-600 bg-red-50 border border-red-100"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  مسح جميع الفلاتر
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Count */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">
-            <span className="font-bold text-[#0B1E3D]">
-              {filteredProducts.length}
-            </span>{" "}
-            منتج
-          </p>
-        </div>
-
-        {/* Products */}
-        {filteredProducts.length === 0 ? (
-          <div className="bg-white rounded-xl border border-[#0B1E3D]/5 py-16 text-center">
-            <ShoppingBag className="w-10 h-10 text-[#C9A24B] mx-auto mb-4" />
-
-            <h2 className="font-bold text-[#0B1E3D]">
-              لا توجد منتجات
-            </h2>
-
-            <p className="text-sm text-gray-500 mt-2">
-              لا توجد منتجات تطابق البحث الحالي.
+        {/* Results count */}
+        {!loading && (
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-500">
+              {products.length > 0 ? (
+                <>
+                  <span className="font-bold text-[#0B1E3D]">
+                    {products.length}
+                  </span>{" "}
+                  منتج
+                  {hasFilters &&
+                    " (نتائج البحث)"}
+                </>
+              ) : (
+                "لا توجد نتائج"
+              )}
             </p>
           </div>
-        ) : (
-          <div className="bg-white rounded-xl border border-[#0B1E3D]/5 overflow-hidden">
-            <div className="overflow-x-auto">
+        )}
+
+        {/* Loading */}
+        {loading ? (
+          <>
+            <div className="lg:hidden space-y-3">
+              {Array.from({
+                length: 4,
+              }).map((_, index) => (
+                <SkeletonCard
+                  key={index}
+                />
+              ))}
+            </div>
+
+            <div className="hidden lg:block bg-white rounded-xl border border-[#0B1E3D]/5 overflow-hidden">
               <table className="w-full">
-                <thead className="bg-[#FAFAF8] border-b border-[#0B1E3D]/5">
-                  <tr>
-                    <th className="text-right p-4 text-xs text-gray-500">
-                      المنتج
+                <thead>
+                  <tr className="border-b border-[#0B1E3D]/5 bg-[#FAFAF8]">
+                    <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500">
+                      الصورة
                     </th>
 
-                    <th className="text-right p-4 text-xs text-gray-500">
+                    <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500">
+                      الاسم
+                    </th>
+
+                    <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500">
                       التصنيف
                     </th>
 
-                    <th className="text-right p-4 text-xs text-gray-500">
+                    <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500">
                       السعر
                     </th>
 
-                    <th className="text-right p-4 text-xs text-gray-500">
+                    <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500">
                       المخزون
                     </th>
 
-                    <th className="text-right p-4 text-xs text-gray-500">
+                    <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500">
                       الحالة
                     </th>
 
-                    <th className="text-right p-4 text-xs text-gray-500">
+                    <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500">
+                      التحديث
+                    </th>
+
+                    <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500">
                       الإجراءات
                     </th>
                   </tr>
                 </thead>
 
-                <tbody className="divide-y divide-[#0B1E3D]/5">
-                  {filteredProducts.map((product) => (
-                    <tr
-                      key={product.id}
-                      className="hover:bg-[#FAFAF8]"
-                    >
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <ProductImage
-                            src={product.images?.[0] || null}
-                            alt={product.name_ar}
-                          />
-
-                          <div>
-                            <p className="font-semibold text-[#0B1E3D]">
-                              {product.name_ar}
-                            </p>
-
-                            {product.name_en && (
-                              <p
-                                dir="ltr"
-                                className="text-xs text-gray-400 mt-1"
-                              >
-                                {product.name_en}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="p-4 text-sm text-gray-600">
-                        {product.category?.name_ar || "بدون تصنيف"}
-                      </td>
-
-                      <td className="p-4 font-semibold text-[#0B1E3D]">
-                        {formatPrice(product.price)}
-                      </td>
-
-                      <td className="p-4">
-                        <span
-                          className={
-                            product.stock === 0
-                              ? "text-red-600 font-bold"
-                              : product.stock <= 5
-                              ? "text-orange-600 font-bold"
-                              : "text-[#0B1E3D] font-semibold"
-                          }
-                        >
-                          {product.stock}
-                        </span>
-                      </td>
-
-                      <td className="p-4">
-                        <StatusBadge
-                          active={product.is_active}
-                          stock={product.stock}
-                        />
-                      </td>
-
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-
-                          <Link
-                            href={`/admin/products/${product.id}`}
-                            className="p-2 rounded-lg text-[#0B1E3D] hover:bg-[#0B1E3D]/5"
-                            title="تعديل"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Link>
-
-                          <button
-                            onClick={() =>
-                              toggleStatus(product)
-                            }
-                            disabled={
-                              toggling === product.id
-                            }
-                            className="p-2 rounded-lg text-orange-600 hover:bg-orange-50 disabled:opacity-50"
-                            title={
-                              product.is_active
-                                ? "تعطيل"
-                                : "تفعيل"
-                            }
-                          >
-                            {toggling === product.id ? (
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                            ) : product.is_active ? (
-                              <XCircle className="w-4 h-4" />
-                            ) : (
-                              <CheckCircle2 className="w-4 h-4" />
-                            )}
-                          </button>
-
-                          <button
-                            onClick={() =>
-                              setDeleteId(product.id)
-                            }
-                            className="p-2 rounded-lg text-red-600 hover:bg-red-50"
-                            title="حذف"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-
-                        </div>
-                      </td>
-                    </tr>
+                <tbody>
+                  {Array.from({
+                    length: 5,
+                  }).map((_, index) => (
+                    <SkeletonTableRow
+                      key={index}
+                    />
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
+          </>
+        ) : products.length === 0 ? (
+          <div className="bg-white rounded-xl border border-[#0B1E3D]/5 py-16 px-4 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-[#F5F0E8] flex items-center justify-center mx-auto mb-4">
+              <ShoppingBag className="w-8 h-8 text-[#C9A24B]" />
+            </div>
 
-      </main>
+            <h3 className="text-lg font-bold text-[#0B1E3D] mb-2">
+              {hasFilters
+                ? "لا توجد نتائج مطابقة"
+                : "لا توجد منتجات حتى الآن"}
+            </h3>
 
-      {/* Delete Modal */}
-      {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() =>
-              !deleting && setDeleteId(null)
-            }
-          />
-
-          <div className="relative bg-white rounded-2xl p-6 max-w-md w-full">
-            <h2 className="text-lg font-bold text-[#0B1E3D]">
-              حذف المنتج
-            </h2>
-
-            <p className="text-sm text-gray-500 mt-2">
-              هل أنت متأكد من حذف هذا المنتج؟ لا يمكن التراجع عن هذا الإجراء.
+            <p className="text-gray-500 text-sm mb-6 max-w-sm mx-auto">
+              {hasFilters
+                ? "جرب تعديل معايير البحث أو مسح الفلاتر للعثور على ما تبحث عنه"
+                : "ابدأ بإضافة منتجك الأول لإدارة مخزونك وعرضه في المتجر"}
             </p>
 
-            <div className="flex gap-3 mt-6">
-
+            {hasFilters ? (
               <button
-                onClick={() => setDeleteId(null)}
-                disabled={deleting}
-                className="flex-1 py-3 rounded-xl border border-gray-200"
+                onClick={
+                  clearFilters
+                }
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B1E3D] text-white font-medium hover:bg-[#0B1E3D]/90 transition-colors"
               >
-                إلغاء
+                <X className="w-4 h-4" />
+                مسح الفلاتر
               </button>
-
-              <button
-                onClick={deleteProduct}
-                disabled={deleting}
-                className="flex-1 py-3 rounded-xl bg-red-600 text-white flex items-center justify-center gap-2"
+            ) : (
+              <Link
+                href="/admin/products/new"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C9A24B] hover:bg-[#D4B05F] text-[#0B1E3D] font-bold transition-colors"
               >
-                {deleting && (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                )}
+                <Plus className="w-4 h-4" />
+                إضافة أول منتج
+              </Link>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Mobile */}
+            <div className="lg:hidden space-y-3">
+              {products.map(
+                (product) => (
+                  <MobileProductCard
+                    key={product.id}
+                    product={product}
+                    onDeleteClick={
+                      setDeleteModalProduct
+                    }
+                    onToggleStatus={
+                      handleToggleStatus
+                    }
+                    isToggling={
+                      isToggling
+                    }
+                  />
+                )
+              )}
+            </div>
 
-                {deleting
-                  ? "جارٍ الحذف..."
-                  : "حذف المنتج"}
-              </button>
+            {/* Desktop */}
+            <div className="hidden lg:block bg-white rounded-xl border border-[#0B1E3D]/5 overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[#0B1E3D]/5 bg-[#FAFAF8]">
+                      <th className="py-3.5 px-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        الصورة
+                      </th>
 
+                      <th
+                        className="py-3.5 px-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#0B1E3D] transition-colors select-none"
+                        onClick={() =>
+                          handleSort(
+                            "name_ar"
+                          )
+                        }
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          الاسم
+
+                          {sortField ===
+                            "name_ar" && (
+                            <ArrowUpDown
+                              className={`w-3 h-3 ${
+                                sortOrder ===
+                                "asc"
+                                  ? "rotate-180"
+                                  : ""
+                              }`}
+                            />
+                          )}
+                        </span>
+                      </th>
+
+                      <th className="py-3.5 px-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        التصنيف
+                      </th>
+
+                      <th
+                        className="py-3.5 px-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#0B1E3D] transition-colors select-none"
+                        onClick={() =>
+                          handleSort(
+                            "price"
+                          )
+                        }
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          السعر
+
+                          {sortField ===
+                            "price" && (
+                            <ArrowUpDown
+                              className={`w-3 h-3 ${
+                                sortOrder ===
+                                "asc"
+                                  ? "rotate-180"
+                                  : ""
+                              }`}
+                            />
+                          )}
+                        </span>
+                      </th>
+
+                      <th
+                        className="py-3.5 px-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#0B1E3D] transition-colors select-none"
+                        onClick={() =>
+                          handleSort(
+                            "stock"
+                          )
+                        }
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          المخزون
+
+                          {sortField ===
+                            "stock" && (
+                            <ArrowUpDown
+                              className={`w-3 h-3 ${
+                                sortOrder ===
+                                "asc"
+                                  ? "rotate-180"
+                                  : ""
+                              }`}
+                            />
+                          )}
+                        </span>
+                      </th>
+
+                      <th className="py-3.5 px-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        الحالة
+                      </th>
+
+                      <th
+                        className="py-3.5 px-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#0B1E3D] transition-colors select-none"
+                        onClick={() =>
+                          handleSort(
+                            "updated_at"
+                          )
+                        }
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          التحديث
+
+                          {sortField ===
+                            "updated_at" && (
+                            <ArrowUpDown
+                              className={`w-3 h-3 ${
+                                sortOrder ===
+                                "asc"
+                                  ? "rotate-180"
+                                  : ""
+                              }`}
+                            />
+                          )}
+                        </span>
+                      </th>
+
+                      <th className="py-3.5 px-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        الإجراءات
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-[#0B1E3D]/5">
+                    {products.map(
+                      (product) => (
+                        <tr
+                          key={
+                            product.id
+                          }
+                          className="group hover:bg-[#F5F0E8]/30 transition-colors"
+                        >
+                          <td className="py-4 px-4">
+                            <ProductImage
+                              src={
+                                product
+                                  .images?.[0] ||
+                                null
+                              }
+                              alt={
+                                product.name_ar
+                              }
+                            />
+                          </td>
+
+                          <td className="py-4 px-4">
+                            <div
+                              className="font-medium text-[#0B1E3D]"
+                              dir="rtl"
+                            >
+                              {
+                                product.name_ar
+                              }
+                            </div>
+                          </td>
+
+                          <td className="py-4 px-4">
+                            <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+                              <Tag className="w-3 h-3 text-[#C9A24B]" />
+
+                              {product
+                                .category
+                                ?.name_ar ||
+                                "—"}
+                            </span>
+                          </td>
+
+                          <td className="py-4 px-4">
+                            <span className="font-semibold text-[#0B1E3D]">
+                              {formatPrice(
+                                product.price
+                              )}
+                            </span>
+                          </td>
+
+                          <td className="py-4 px-4">
+                            <span
+                              className={`font-semibold ${
+                                product.stock ===
+                                0
+                                  ? "text-red-600"
+                                  : product.stock <=
+                                    5
+                                  ? "text-orange-600"
+                                  : "text-[#0B1E3D]"
+                              }`}
+                            >
+                              {
+                                product.stock
+                              }
+                            </span>
+                          </td>
+
+                          <td className="py-4 px-4">
+                            <StatusBadge
+                              stock={
+                                product.stock
+                              }
+                              isActive={
+                                product.is_active
+                              }
+                            />
+                          </td>
+
+                          <td className="py-4 px-4 text-xs text-gray-500">
+                            {new Date(
+                              product.updated_at
+                            ).toLocaleDateString(
+                              "ar-SA",
+                              {
+                                year:
+                                  "numeric",
+                                month:
+                                  "short",
+                                day:
+                                  "numeric",
+                              }
+                            )}
+                          </td>
+
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Link
+                                href={`/admin/products/${product.id}`}
+                                className="p-1.5 rounded-lg text-[#0B1E3D] hover:bg-[#0B1E3D]/5 hover:text-[#C9A24B] transition-colors"
+                                title="تعديل"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Link>
+
+                              <button
+                                onClick={() =>
+                                  handleToggleStatus(
+                                    product.id,
+                                    product.is_active
+                                  )
+                                }
+                                disabled={
+                                  isToggling ===
+                                  product.id
+                                }
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  product.is_active
+                                    ? "text-orange-600 hover:bg-orange-50"
+                                    : "text-green-600 hover:bg-green-50"
+                                } disabled:opacity-50`}
+                                title={
+                                  product.is_active
+                                    ? "تعطيل"
+                                    : "تفعيل"
+                                }
+                              >
+                                {isToggling ===
+                                product.id ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : product.is_active ? (
+                                  <XCircle className="w-4 h-4" />
+                                ) : (
+                                  <CheckCircle2 className="w-4 h-4" />
+                                )}
+                              </button>
+
+                              <button
+                                onClick={() =>
+                                  setDeleteModalProduct(
+                                    product
+                                  )
+                                }
+                                className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
+                                title="حذف"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Delete modal */}
+      <DeleteModal
+        product={
+          deleteModalProduct
+        }
+        onClose={() =>
+          setDeleteModalProduct(
+            null
+          )
+        }
+        onConfirm={
+          handleDelete
+        }
+        isDeleting={
+          isDeleting
+        }
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────
+
+export default function AdminProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          className="min-h-screen bg-[#FAFAF8] p-4"
+          dir="rtl"
+        >
+          <div className="max-w-7xl mx-auto space-y-6">
+            <div className="h-20 bg-white rounded-xl border border-[#0B1E3D]/5 animate-pulse" />
+
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+              {Array.from({
+                length: 5,
+              }).map((_, index) => (
+                <SkeletonKPI
+                  key={index}
+                />
+              ))}
+            </div>
+
+            <div className="h-16 bg-white rounded-xl border border-[#0B1E3D]/5 animate-pulse" />
+
+            <div className="space-y-3">
+              {Array.from({
+                length: 4,
+              }).map((_, index) => (
+                <SkeletonCard
+                  key={index}
+                />
+              ))}
             </div>
           </div>
         </div>
-      )}
-    </div>
+      }
+    >
+      <AdminProductsContent />
+    </Suspense>
   );
 }
