@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  Suspense,
+} from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
@@ -21,10 +26,14 @@ import {
   ArrowUpDown,
   ChevronDown,
   ShoppingBag,
-  SlidersHorizontal,
+  MoreVertical,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatPrice } from "@/lib/utils";
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 interface Product {
   id: string;
@@ -72,41 +81,66 @@ type StatusFilter =
   | "out_of_stock";
 
 /* =========================================================
-   Skeletons
+   HELPERS
+========================================================= */
+
+function formatDate(date: string) {
+  if (!date) return "—";
+
+  return new Date(date).toLocaleDateString("ar-EG", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatNumber(value: number) {
+  return value.toLocaleString("ar-EG");
+}
+
+/* =========================================================
+   SKELETONS
 ========================================================= */
 
 function SkeletonKPI() {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 animate-pulse">
-      <div className="h-10 w-10 rounded-xl bg-slate-100 mb-4" />
-      <div className="h-7 w-16 rounded bg-slate-100 mb-2" />
-      <div className="h-3 w-24 rounded bg-slate-100" />
+    <div className="rounded-2xl border border-[#0B1E3D]/5 bg-white p-4 animate-pulse">
+      <div className="h-9 w-9 rounded-xl bg-[#0B1E3D]/5 mb-4" />
+      <div className="h-7 w-16 rounded bg-[#0B1E3D]/5 mb-2" />
+      <div className="h-3 w-24 rounded bg-[#0B1E3D]/5" />
     </div>
   );
 }
 
 function SkeletonProduct() {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 animate-pulse">
+    <div className="rounded-2xl border border-[#0B1E3D]/5 bg-white p-4 animate-pulse">
       <div className="flex gap-3">
-        <div className="h-20 w-20 shrink-0 rounded-xl bg-slate-100" />
+        <div className="h-16 w-16 shrink-0 rounded-xl bg-[#0B1E3D]/5" />
 
-        <div className="flex-1 min-w-0">
-          <div className="h-4 w-3/4 rounded bg-slate-100 mb-3" />
-          <div className="h-3 w-1/2 rounded bg-slate-100 mb-4" />
+        <div className="flex-1">
+          <div className="h-4 w-3/4 rounded bg-[#0B1E3D]/5 mb-3" />
+          <div className="h-3 w-1/2 rounded bg-[#0B1E3D]/5 mb-3" />
 
           <div className="flex gap-2">
-            <div className="h-7 w-20 rounded-lg bg-slate-100" />
-            <div className="h-7 w-20 rounded-lg bg-slate-100" />
+            <div className="h-5 w-16 rounded-full bg-[#0B1E3D]/5" />
+            <div className="h-5 w-14 rounded-full bg-[#0B1E3D]/5" />
           </div>
         </div>
       </div>
+
+      <div className="grid grid-cols-2 gap-2 mt-4">
+        <div className="h-12 rounded-xl bg-[#0B1E3D]/5" />
+        <div className="h-12 rounded-xl bg-[#0B1E3D]/5" />
+      </div>
+
+      <div className="h-10 rounded-xl bg-[#0B1E3D]/5 mt-3" />
     </div>
   );
 }
 
 /* =========================================================
-   Status
+   STATUS
 ========================================================= */
 
 function StatusBadge({
@@ -118,7 +152,7 @@ function StatusBadge({
 }) {
   if (!isActive) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-600 whitespace-nowrap">
         <XCircle className="h-3.5 w-3.5" />
         غير نشط
       </span>
@@ -127,7 +161,7 @@ function StatusBadge({
 
   if (stock === 0) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-100 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-600">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-100 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700 whitespace-nowrap">
         <XCircle className="h-3.5 w-3.5" />
         نفد المخزون
       </span>
@@ -136,7 +170,7 @@ function StatusBadge({
 
   if (stock <= 5) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-100 bg-orange-50 px-2.5 py-1 text-[11px] font-bold text-orange-600">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-100 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700 whitespace-nowrap">
         <AlertTriangle className="h-3.5 w-3.5" />
         مخزون منخفض
       </span>
@@ -144,7 +178,7 @@ function StatusBadge({
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-600">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-green-100 bg-green-50 px-2.5 py-1 text-[11px] font-semibold text-green-700 whitespace-nowrap">
       <CheckCircle2 className="h-3.5 w-3.5" />
       نشط
     </span>
@@ -152,33 +186,36 @@ function StatusBadge({
 }
 
 /* =========================================================
-   Product Image
+   PRODUCT IMAGE
 ========================================================= */
 
 function ProductImage({
   src,
   alt,
-  large = false,
+  size = "md",
 }: {
   src: string | null;
   alt: string;
-  large?: boolean;
+  size?: "sm" | "md" | "lg";
 }) {
-  const size = large
-    ? "h-[84px] w-[84px] sm:h-24 sm:w-24"
-    : "h-12 w-12";
+  const sizeClass =
+    size === "sm"
+      ? "h-12 w-12 rounded-xl"
+      : size === "lg"
+      ? "h-20 w-20 rounded-2xl"
+      : "h-16 w-16 rounded-xl";
 
   if (src) {
     return (
       <div
-        className={`relative shrink-0 overflow-hidden rounded-2xl bg-[#F5F0E8] ${size}`}
+        className={`relative shrink-0 overflow-hidden bg-[#F5F0E8] ${sizeClass}`}
       >
         <Image
           src={src}
           alt={alt}
           fill
-          sizes={large ? "96px" : "48px"}
           className="object-cover"
+          sizes="80px"
         />
       </div>
     );
@@ -186,15 +223,15 @@ function ProductImage({
 
   return (
     <div
-      className={`flex shrink-0 items-center justify-center rounded-2xl bg-[#F5F0E8] ${size}`}
+      className={`flex shrink-0 items-center justify-center bg-[#F5F0E8] ${sizeClass}`}
     >
-      <Box className="h-7 w-7 text-[#C9A24B]/70" />
+      <Box className="h-6 w-6 text-[#C9A24B]/70" />
     </div>
   );
 }
 
 /* =========================================================
-   KPI
+   KPI CARD
 ========================================================= */
 
 function KPICard({
@@ -211,30 +248,30 @@ function KPICard({
   bgColor: string;
 }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_2px_12px_rgba(11,30,61,0.04)]">
+    <div className="min-w-0 rounded-2xl border border-[#0B1E3D]/5 bg-white p-4 shadow-[0_2px_10px_rgba(11,30,61,0.03)] transition-all hover:shadow-md sm:p-5">
       <div
-        className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl"
+        className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl sm:h-10 sm:w-10"
         style={{ backgroundColor: bgColor }}
       >
         <Icon
-          className="h-5 w-5"
+          className="h-4.5 w-4.5 sm:h-5 sm:w-5"
           style={{ color }}
         />
       </div>
 
-      <div className="text-xl font-black tracking-tight text-[#0B1E3D] sm:text-2xl">
-        {value.toLocaleString("ar-SA")}
-      </div>
+      <p className="text-xl font-extrabold tracking-tight text-[#0B1E3D] sm:text-2xl">
+        {formatNumber(value)}
+      </p>
 
-      <div className="mt-1 text-[11px] font-medium text-slate-500 sm:text-xs">
+      <p className="mt-1 text-[11px] leading-4 text-gray-500 sm:text-sm">
         {label}
-      </div>
+      </p>
     </div>
   );
 }
 
 /* =========================================================
-   Delete Modal
+   DELETE MODAL
 ========================================================= */
 
 function DeleteModal({
@@ -251,54 +288,62 @@ function DeleteModal({
   if (!product) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center p-3 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-[#0B1E3D]/50 backdrop-blur-sm"
         onClick={isDeleting ? undefined : onClose}
       />
 
       <div
-        className="relative w-full max-w-md overflow-hidden rounded-[24px] bg-white shadow-2xl"
+        className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl"
         dir="rtl"
       >
         <div className="p-5 sm:p-6">
-          <div className="mb-5 flex items-center gap-3">
+          <div className="mb-5 flex items-start gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-50">
               <Trash2 className="h-5 w-5 text-red-600" />
             </div>
 
-            <div>
-              <h3 className="text-lg font-black text-[#0B1E3D]">
+            <div className="min-w-0">
+              <h3 className="text-lg font-bold text-[#0B1E3D]">
                 حذف المنتج
               </h3>
 
-              <p className="mt-0.5 text-xs text-slate-500">
-                هذا الإجراء لا يمكن التراجع عنه
+              <p className="mt-1 text-xs leading-5 text-gray-500">
+                هذا الإجراء لا يمكن التراجع عنه.
               </p>
             </div>
           </div>
 
-          <div className="mb-6 rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-700">
-            هل أنت متأكد من حذف المنتج{" "}
-            <strong className="text-[#0B1E3D]">
-              "{product.name_ar}"
-            </strong>
-            ؟
+          <div className="rounded-2xl bg-[#FAFAF8] p-4">
+            <p className="text-sm leading-6 text-[#0B1E3D]">
+              هل أنت متأكد من حذف:
+            </p>
+
+            <p className="mt-1 break-words font-bold text-[#0B1E3D]">
+              {product.name_ar}
+            </p>
+
+            <p className="mt-2 text-xs leading-5 text-gray-500">
+              سيتم حذف المنتج نهائيًا من قاعدة البيانات.
+            </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="mt-5 grid grid-cols-2 gap-3">
             <button
+              type="button"
               onClick={onClose}
               disabled={isDeleting}
-              className="h-12 rounded-xl border border-slate-200 bg-white text-sm font-bold text-[#0B1E3D] transition hover:bg-slate-50 disabled:opacity-50"
+              className="h-11 rounded-xl border border-[#0B1E3D]/10 bg-white px-4 text-sm font-bold text-[#0B1E3D] transition hover:bg-gray-50 disabled:opacity-50"
             >
               إلغاء
             </button>
 
             <button
+              type="button"
               onClick={onConfirm}
               disabled={isDeleting}
-              className="flex h-12 items-center justify-center gap-2 rounded-xl bg-red-600 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-50"
+              className="flex h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-50"
             >
               {isDeleting ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
@@ -306,7 +351,7 @@ function DeleteModal({
                 <Trash2 className="h-4 w-4" />
               )}
 
-              {isDeleting ? "جارٍ الحذف..." : "حذف المنتج"}
+              {isDeleting ? "جارٍ الحذف..." : "حذف نهائي"}
             </button>
           </div>
         </div>
@@ -316,7 +361,7 @@ function DeleteModal({
 }
 
 /* =========================================================
-   Mobile Product Card
+   MOBILE PRODUCT CARD
 ========================================================= */
 
 function MobileProductCard({
@@ -327,65 +372,70 @@ function MobileProductCard({
 }: {
   product: Product;
   onDeleteClick: (product: Product) => void;
-  onToggleStatus: (id: string, currentStatus: boolean) => void;
+  onToggleStatus: (
+    id: string,
+    currentStatus: boolean
+  ) => void;
   isToggling: string | null;
 }) {
   return (
-    <article className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[0_2px_14px_rgba(11,30,61,0.04)]">
+    <article className="overflow-hidden rounded-2xl border border-[#0B1E3D]/7 bg-white shadow-[0_2px_12px_rgba(11,30,61,0.04)]">
       {/* Product header */}
       <div className="p-4">
         <div className="flex items-start gap-3">
           <ProductImage
             src={product.images?.[0] || null}
             alt={product.name_ar}
-            large
+            size="md"
           />
 
           <div className="min-w-0 flex-1">
-            <div className="mb-2 flex items-start justify-between gap-2">
-              <h3
-                dir="rtl"
-                className="line-clamp-2 text-sm font-black leading-5 text-[#0B1E3D]"
-              >
-                {product.name_ar}
-              </h3>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3
+                  className="break-words text-sm font-extrabold leading-5 text-[#0B1E3D]"
+                  dir="rtl"
+                >
+                  {product.name_ar}
+                </h3>
+
+                <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-gray-500">
+                  <Tag className="h-3 w-3 shrink-0 text-[#C9A24B]" />
+
+                  <span className="truncate">
+                    {product.category?.name_ar ||
+                      "بدون تصنيف"}
+                  </span>
+                </div>
+              </div>
 
               <StatusBadge
                 stock={product.stock}
                 isActive={product.is_active}
               />
             </div>
-
-            <div className="flex items-center gap-1.5 text-xs text-slate-500">
-              <Tag className="h-3.5 w-3.5 text-[#C9A24B]" />
-
-              <span className="truncate">
-                {product.category?.name_ar ||
-                  "بدون تصنيف"}
-              </span>
-            </div>
           </div>
         </div>
 
-        {/* Product data */}
+        {/* Product stats */}
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <div className="rounded-2xl bg-[#FAFAF8] p-3">
-            <div className="mb-1 text-[10px] font-bold text-slate-400">
+          <div className="rounded-xl bg-[#FAFAF8] px-3 py-2.5">
+            <p className="text-[10px] font-medium text-gray-400">
               السعر
-            </div>
+            </p>
 
-            <div className="truncate text-sm font-black text-[#0B1E3D]">
+            <p className="mt-0.5 truncate text-sm font-extrabold text-[#0B1E3D]">
               {formatPrice(product.price)}
-            </div>
+            </p>
           </div>
 
-          <div className="rounded-2xl bg-[#FAFAF8] p-3">
-            <div className="mb-1 text-[10px] font-bold text-slate-400">
+          <div className="rounded-xl bg-[#FAFAF8] px-3 py-2.5">
+            <p className="text-[10px] font-medium text-gray-400">
               المخزون
-            </div>
+            </p>
 
-            <div
-              className={`text-sm font-black ${
+            <p
+              className={`mt-0.5 text-sm font-extrabold ${
                 product.stock === 0
                   ? "text-red-600"
                   : product.stock <= 5
@@ -393,39 +443,33 @@ function MobileProductCard({
                   : "text-[#0B1E3D]"
               }`}
             >
-              {product.stock}
-            </div>
+              {formatNumber(product.stock)}
+            </p>
           </div>
         </div>
 
-        {/* Updated */}
-        <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
-          <span>آخر تحديث</span>
+        <div className="mt-2 flex items-center justify-between rounded-xl border border-[#0B1E3D]/5 px-3 py-2.5">
+          <span className="text-[10px] text-gray-400">
+            آخر تحديث
+          </span>
 
-          <span className="font-semibold text-slate-500">
-            {new Date(
-              product.updated_at
-            ).toLocaleDateString("ar-SA", {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
+          <span className="text-[11px] font-bold text-[#0B1E3D]">
+            {formatDate(product.updated_at)}
           </span>
         </div>
-      </div>
 
-      {/* Actions */}
-      <div className="border-t border-slate-100 bg-slate-50/70 p-3">
-        <div className="grid grid-cols-[1fr_1fr_48px] gap-2">
+        {/* Actions */}
+        <div className="mt-3 grid grid-cols-[1fr_1fr_auto] gap-2">
           <Link
             href={`/admin/products/${product.id}`}
-            className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0B1E3D] text-xs font-bold text-white transition active:scale-[0.98]"
+            className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-[#0B1E3D] px-3 text-xs font-bold text-white transition hover:bg-[#102b55] active:scale-[0.98]"
           >
             <Pencil className="h-4 w-4" />
             تعديل
           </Link>
 
           <button
+            type="button"
             onClick={() =>
               onToggleStatus(
                 product.id,
@@ -433,10 +477,10 @@ function MobileProductCard({
               )
             }
             disabled={isToggling === product.id}
-            className={`flex h-11 items-center justify-center gap-1.5 rounded-xl border text-xs font-bold transition active:scale-[0.98] disabled:opacity-50 ${
+            className={`flex h-11 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-bold transition active:scale-[0.98] disabled:opacity-50 ${
               product.is_active
-                ? "border-orange-200 bg-orange-50 text-orange-700"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                ? "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
             }`}
           >
             {isToggling === product.id ? (
@@ -447,16 +491,13 @@ function MobileProductCard({
               <CheckCircle2 className="h-4 w-4" />
             )}
 
-            {product.is_active
-              ? "تعطيل"
-              : "تفعيل"}
+            {product.is_active ? "تعطيل" : "تفعيل"}
           </button>
 
           <button
-            onClick={() =>
-              onDeleteClick(product)
-            }
-            className="flex h-11 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 transition active:scale-[0.98]"
+            type="button"
+            onClick={() => onDeleteClick(product)}
+            className="flex h-11 w-11 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 active:scale-[0.98]"
             aria-label="حذف المنتج"
           >
             <Trash2 className="h-4 w-4" />
@@ -468,54 +509,108 @@ function MobileProductCard({
 }
 
 /* =========================================================
-   Main
+   EMPTY STATE
+========================================================= */
+
+function EmptyState({
+  hasFilters,
+  clearFilters,
+}: {
+  hasFilters: boolean;
+  clearFilters: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-[#0B1E3D]/5 bg-white px-5 py-14 text-center shadow-sm">
+      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#F5F0E8]">
+        <ShoppingBag className="h-7 w-7 text-[#C9A24B]" />
+      </div>
+
+      <h3 className="text-lg font-extrabold text-[#0B1E3D]">
+        {hasFilters
+          ? "لا توجد نتائج مطابقة"
+          : "لا توجد منتجات حتى الآن"}
+      </h3>
+
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-gray-500">
+        {hasFilters
+          ? "جرّب تعديل البحث أو الفلاتر."
+          : "ابدأ بإضافة منتجك الأول لإدارة متجرك."}
+      </p>
+
+      {hasFilters ? (
+        <button
+          type="button"
+          onClick={clearFilters}
+          className="mt-6 inline-flex h-11 items-center gap-2 rounded-xl bg-[#0B1E3D] px-5 text-sm font-bold text-white"
+        >
+          <X className="h-4 w-4" />
+          مسح الفلاتر
+        </button>
+      ) : (
+        <Link
+          href="/admin/products/new"
+          className="mt-6 inline-flex h-11 items-center gap-2 rounded-xl bg-[#C9A24B] px-5 text-sm font-extrabold text-[#0B1E3D]"
+        >
+          <Plus className="h-4 w-4" />
+          إضافة أول منتج
+        </Link>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   MAIN CONTENT
 ========================================================= */
 
 function AdminProductsContent() {
   const searchParams = useSearchParams();
 
-  const [products, setProducts] =
-    useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [kpi, setKpi] = useState<KPIData | null>(null);
 
-  const [categories, setCategories] =
-    useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [kpi, setKpi] =
-    useState<KPIData | null>(null);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState<string | null>(null);
-
-  const [searchQuery, setSearchQuery] =
-    useState(
-      searchParams.get("q") || ""
-    );
+  const [searchQuery, setSearchQuery] = useState(
+    searchParams.get("q") || ""
+  );
 
   const [statusFilter, setStatusFilter] =
-    useState<StatusFilter>(
-      (searchParams.get("status") as StatusFilter) ||
-        "all"
-    );
+    useState<StatusFilter>(() => {
+      const value = searchParams.get("status");
+
+      return value === "active" ||
+        value === "inactive" ||
+        value === "low_stock" ||
+        value === "out_of_stock"
+        ? value
+        : "all";
+    });
 
   const [categoryFilter, setCategoryFilter] =
-    useState(
-      searchParams.get("category") || "all"
-    );
+    useState(searchParams.get("category") || "all");
 
   const [sortField, setSortField] =
-    useState<SortField>(
-      (searchParams.get("sort") as SortField) ||
-        "updated_at"
-    );
+    useState<SortField>(() => {
+      const value = searchParams.get("sort");
+
+      return value === "name_ar" ||
+        value === "price" ||
+        value === "stock" ||
+        value === "created_at" ||
+        value === "updated_at"
+        ? value
+        : "updated_at";
+    });
 
   const [sortOrder, setSortOrder] =
-    useState<SortOrder>(
-      (searchParams.get("order") as SortOrder) ||
-        "desc"
-    );
+    useState<SortOrder>(() => {
+      return searchParams.get("order") === "asc"
+        ? "asc"
+        : "desc";
+    });
 
   const [deleteModalProduct, setDeleteModalProduct] =
     useState<Product | null>(null);
@@ -534,7 +629,7 @@ function AdminProductsContent() {
   );
 
   /* =======================================================
-     Fetch
+     FETCH
   ======================================================= */
 
   const fetchData = useCallback(async () => {
@@ -542,6 +637,7 @@ function AdminProductsContent() {
       setLoading(true);
       setError(null);
 
+      /* Categories */
       const {
         data: catsData,
         error: categoriesError,
@@ -560,6 +656,7 @@ function AdminProductsContent() {
 
       setCategories(catsData || []);
 
+      /* Products */
       let query = supabase
         .from("products")
         .select(`
@@ -584,17 +681,11 @@ function AdminProductsContent() {
       }
 
       if (statusFilter === "active") {
-        query = query.eq(
-          "is_active",
-          true
-        );
+        query = query.eq("is_active", true);
       }
 
       if (statusFilter === "inactive") {
-        query = query.eq(
-          "is_active",
-          false
-        );
+        query = query.eq("is_active", false);
       }
 
       if (statusFilter === "low_stock") {
@@ -610,6 +701,11 @@ function AdminProductsContent() {
           .eq("stock", 0);
       }
 
+      /*
+       * IMPORTANT:
+       * The database contains name_ar.
+       * Do NOT use name_en here.
+       */
       if (searchQuery.trim()) {
         query = query.ilike(
           "name_ar",
@@ -617,13 +713,9 @@ function AdminProductsContent() {
         );
       }
 
-      query = query.order(
-        sortField,
-        {
-          ascending:
-            sortOrder === "asc",
-        }
-      );
+      query = query.order(sortField, {
+        ascending: sortOrder === "asc",
+      });
 
       const {
         data: productsData,
@@ -632,7 +724,7 @@ function AdminProductsContent() {
 
       if (productsError) {
         throw new Error(
-          `PRODUCTS ERROR: ${productsError.message} | code=${productsError.code || ""}`
+          `PRODUCTS ERROR: ${productsError.message} | code=${productsError.code || ""} | details=${productsError.details || ""} | hint=${productsError.hint || ""}`
         );
       }
 
@@ -641,49 +733,41 @@ function AdminProductsContent() {
           (product: any) => ({
             id: product.id,
             name_ar: product.name_ar,
-            price: Number(
-              product.price || 0
+            price: Number(product.price || 0),
+            stock: Number(product.stock || 0),
+            is_active: Boolean(
+              product.is_active
             ),
-            stock: Number(
-              product.stock || 0
-            ),
-            is_active:
-              Boolean(product.is_active),
-            images:
-              Array.isArray(product.images)
-                ? product.images
-                : null,
+            images: Array.isArray(product.images)
+              ? product.images
+              : null,
             category_id:
               product.category_id || null,
             category:
               product.category || null,
             slug: product.slug,
-            created_at:
-              product.created_at,
-            updated_at:
-              product.updated_at,
+            created_at: product.created_at,
+            updated_at: product.updated_at,
           })
         );
 
       setProducts(transformed);
 
+      /* KPI */
       const {
         data: allProducts,
         error: kpiError,
       } = await supabase
         .from("products")
-        .select(
-          "stock, is_active"
-        );
+        .select("stock, is_active");
 
       if (kpiError) {
         throw new Error(
-          `KPI ERROR: ${kpiError.message}`
+          `KPI ERROR: ${kpiError.message} | code=${kpiError.code || ""}`
         );
       }
 
-      const safeProducts =
-        allProducts || [];
+      const safeProducts = allProducts || [];
 
       setKpi({
         total: safeProducts.length,
@@ -696,20 +780,18 @@ function AdminProductsContent() {
           (p) => !p.is_active
         ).length,
 
-        lowStock:
-          safeProducts.filter(
-            (p) =>
-              p.is_active &&
-              Number(p.stock) > 0 &&
-              Number(p.stock) <= 5
-          ).length,
+        lowStock: safeProducts.filter(
+          (p) =>
+            p.is_active &&
+            Number(p.stock) > 0 &&
+            Number(p.stock) <= 5
+        ).length,
 
-        outOfStock:
-          safeProducts.filter(
-            (p) =>
-              p.is_active &&
-              Number(p.stock) === 0
-          ).length,
+        outOfStock: safeProducts.filter(
+          (p) =>
+            p.is_active &&
+            Number(p.stock) === 0
+        ).length,
       });
     } catch (err: any) {
       console.error(
@@ -719,7 +801,7 @@ function AdminProductsContent() {
 
       setError(
         err?.message ||
-          "تعذر تحميل المنتجات."
+          "تعذر تحميل المنتجات. يرجى المحاولة مرة أخرى."
       );
     } finally {
       setLoading(false);
@@ -742,43 +824,35 @@ function AdminProductsContent() {
   ======================================================= */
 
   useEffect(() => {
-    const params =
-      new URLSearchParams();
+    const params = new URLSearchParams();
 
-    if (searchQuery)
-      params.set("q", searchQuery);
+    if (searchQuery.trim()) {
+      params.set("q", searchQuery.trim());
+    }
 
-    if (statusFilter !== "all")
-      params.set(
-        "status",
-        statusFilter
-      );
+    if (statusFilter !== "all") {
+      params.set("status", statusFilter);
+    }
 
-    if (categoryFilter !== "all")
-      params.set(
-        "category",
-        categoryFilter
-      );
+    if (categoryFilter !== "all") {
+      params.set("category", categoryFilter);
+    }
 
-    if (sortField !== "updated_at")
-      params.set(
-        "sort",
-        sortField
-      );
+    if (sortField !== "updated_at") {
+      params.set("sort", sortField);
+    }
 
-    if (sortOrder !== "desc")
-      params.set(
-        "order",
-        sortOrder
-      );
+    if (sortOrder !== "desc") {
+      params.set("order", sortOrder);
+    }
 
-    const qs = params.toString();
+    const queryString = params.toString();
 
     window.history.replaceState(
       null,
       "",
-      qs
-        ? `/admin/products?${qs}`
+      queryString
+        ? `/admin/products?${queryString}`
         : "/admin/products"
     );
   }, [
@@ -790,7 +864,7 @@ function AdminProductsContent() {
   ]);
 
   /* =======================================================
-     Delete
+     DELETE
   ======================================================= */
 
   const handleDelete = async () => {
@@ -813,11 +887,22 @@ function AdminProductsContent() {
         throw deleteError;
       }
 
+      setProducts((prev) =>
+        prev.filter(
+          (product) =>
+            product.id !==
+            deleteModalProduct.id
+        )
+      );
+
       setDeleteModalProduct(null);
 
       await fetchData();
     } catch (err: any) {
-      console.error(err);
+      console.error(
+        "Delete product error:",
+        err
+      );
 
       alert(
         "فشل حذف المنتج: " +
@@ -830,7 +915,7 @@ function AdminProductsContent() {
   };
 
   /* =======================================================
-     Toggle
+     TOGGLE
   ======================================================= */
 
   const handleToggleStatus = async (
@@ -845,8 +930,7 @@ function AdminProductsContent() {
       } = await supabase
         .from("products")
         .update({
-          is_active:
-            !currentStatus,
+          is_active: !currentStatus,
         })
         .eq("id", id);
 
@@ -854,9 +938,37 @@ function AdminProductsContent() {
         throw updateError;
       }
 
-      await fetchData();
+      setProducts((prev) =>
+        prev.map((product) =>
+          product.id === id
+            ? {
+                ...product,
+                is_active: !currentStatus,
+              }
+            : product
+        )
+      );
+
+      setKpi((prev) => {
+        if (!prev) return prev;
+
+        return {
+          ...prev,
+
+          active: currentStatus
+            ? Math.max(0, prev.active - 1)
+            : prev.active + 1,
+
+          inactive: currentStatus
+            ? prev.inactive + 1
+            : Math.max(0, prev.inactive - 1),
+        };
+      });
     } catch (err: any) {
-      console.error(err);
+      console.error(
+        "Toggle product error:",
+        err
+      );
 
       alert(
         "فشل تغيير حالة المنتج: " +
@@ -869,7 +981,7 @@ function AdminProductsContent() {
   };
 
   /* =======================================================
-     Filters
+     FILTERS
   ======================================================= */
 
   const clearFilters = () => {
@@ -881,36 +993,54 @@ function AdminProductsContent() {
   };
 
   const hasFilters =
-    Boolean(searchQuery) ||
+    Boolean(searchQuery.trim()) ||
     statusFilter !== "all" ||
     categoryFilter !== "all";
 
   /* =======================================================
-     Error
+     SORT
+  ======================================================= */
+
+  const handleSort = (
+    field: SortField
+  ) => {
+    if (sortField === field) {
+      setSortOrder((prev) =>
+        prev === "asc" ? "desc" : "asc"
+      );
+    } else {
+      setSortField(field);
+      setSortOrder("desc");
+    }
+  };
+
+  /* =======================================================
+     ERROR
   ======================================================= */
 
   if (error) {
     return (
       <div
+        className="min-h-[70vh] bg-[#FAFAF8] px-4 py-12"
         dir="rtl"
-        className="flex min-h-[70vh] items-center justify-center bg-[#FAFAF8] px-4"
       >
-        <div className="w-full max-w-lg rounded-[24px] border border-red-100 bg-white p-6 text-center shadow-sm">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50">
-            <AlertTriangle className="h-7 w-7 text-red-500" />
+        <div className="mx-auto flex min-h-[50vh] max-w-xl flex-col items-center justify-center text-center">
+          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50">
+            <AlertTriangle className="h-8 w-8 text-red-500" />
           </div>
 
-          <h2 className="text-lg font-black text-[#0B1E3D]">
-            تعذر تحميل المنتجات
+          <h2 className="text-xl font-extrabold text-[#0B1E3D]">
+            فشل تحميل المنتجات
           </h2>
 
-          <p className="mt-2 break-words text-sm leading-6 text-slate-500">
+          <p className="mt-3 break-words text-sm leading-6 text-gray-500">
             {error}
           </p>
 
           <button
+            type="button"
             onClick={fetchData}
-            className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0B1E3D] px-5 text-sm font-bold text-white"
+            className="mt-6 inline-flex h-11 items-center gap-2 rounded-xl bg-[#0B1E3D] px-5 text-sm font-bold text-white transition hover:bg-[#102b55]"
           >
             <RefreshCw className="h-4 w-4" />
             إعادة المحاولة
@@ -921,69 +1051,73 @@ function AdminProductsContent() {
   }
 
   /* =======================================================
-     Render
+     RENDER
   ======================================================= */
 
   return (
-    <div
+    <main
+      className="min-h-screen overflow-x-hidden bg-[#FAFAF8]"
       dir="rtl"
-      className="min-h-screen w-full overflow-x-hidden bg-[#FAFAF8]"
     >
-      {/* =================================================
-          Header
-      ================================================= */}
+      {/* ===================================================
+          PAGE HEADER
+      =================================================== */}
 
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
-          <div className="flex items-center justify-between gap-3">
+      <header className="border-b border-[#0B1E3D]/5 bg-white">
+        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <div className="mb-1 flex items-center gap-2">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#0B1E3D]">
-                  <Package className="h-4.5 w-4.5 text-[#C9A24B]" />
+              <div className="mb-2 flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0B1E3D]">
+                  <Package className="h-4 w-4 text-[#C9A24B]" />
                 </div>
 
-                <h1 className="truncate text-xl font-black tracking-tight text-[#0B1E3D] sm:text-3xl">
-                  إدارة المنتجات
-                </h1>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#C9A24B]">
+                  Inventory
+                </span>
               </div>
 
-              <p className="hidden text-sm text-slate-500 sm:block">
-                تحكم كامل في المنتجات والمخزون والأسعار
+              <h1 className="text-2xl font-extrabold tracking-tight text-[#0B1E3D] sm:text-3xl">
+                إدارة المنتجات
+              </h1>
+
+              <p className="mt-1 max-w-xl text-xs leading-5 text-gray-500 sm:text-sm">
+                إدارة المنتجات والمخزون والأسعار والحالة من مكان واحد.
               </p>
             </div>
 
             <Link
               href="/admin/products/new"
-              className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#C9A24B] px-4 text-xs font-black text-[#0B1E3D] shadow-sm transition active:scale-[0.98] sm:h-12 sm:px-5 sm:text-sm"
+              className="flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#C9A24B] px-5 text-sm font-extrabold text-[#0B1E3D] shadow-sm transition hover:bg-[#D4B05F] active:scale-[0.98] sm:w-auto"
             >
-              <Plus className="h-4 w-4 sm:h-5 sm:w-5" />
-              <span>إضافة منتج</span>
+              <Plus className="h-5 w-5" />
+              إضافة منتج
             </Link>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-5 px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
         {/* =================================================
             KPI
         ================================================= */}
 
         {loading ? (
-          <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             {Array.from({ length: 5 }).map(
-              (_, i) => (
-                <SkeletonKPI key={i} />
+              (_, index) => (
+                <SkeletonKPI key={index} />
               )
             )}
           </div>
         ) : kpi ? (
-          <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <KPICard
               icon={Package}
               label="إجمالي المنتجات"
               value={kpi.total}
               color="#0B1E3D"
-              bgColor="#0B1E3D0D"
+              bgColor="#0B1E3D08"
             />
 
             <KPICard
@@ -998,8 +1132,8 @@ function AdminProductsContent() {
               icon={XCircle}
               label="غير النشطة"
               value={kpi.inactive}
-              color="#64748B"
-              bgColor="#64748B10"
+              color="#6B7280"
+              bgColor="#6B728010"
             />
 
             <KPICard
@@ -1021,203 +1155,202 @@ function AdminProductsContent() {
         ) : null}
 
         {/* =================================================
-            Search / Controls
+            SEARCH / FILTER BAR
         ================================================= */}
 
-        <section className="mb-5 rounded-[22px] border border-slate-200 bg-white p-3 shadow-[0_2px_14px_rgba(11,30,61,0.04)] sm:p-4">
-          <div className="flex flex-col gap-2.5 sm:flex-row">
-            {/* Search */}
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <section className="rounded-2xl border border-[#0B1E3D]/5 bg-white p-3.5 shadow-[0_2px_12px_rgba(11,30,61,0.03)] sm:p-4">
+          {/* Search */}
+          <div className="relative">
+            <Search className="pointer-events-none absolute right-3.5 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-gray-400" />
 
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) =>
-                  setSearchQuery(
-                    e.target.value
-                  )
-                }
-                placeholder="ابحث باسم المنتج..."
-                dir="rtl"
-                className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pr-10 pl-10 text-sm font-medium text-[#0B1E3D] outline-none transition placeholder:text-slate-400 focus:border-[#C9A24B] focus:bg-white focus:ring-4 focus:ring-[#C9A24B]/10"
-              />
-
-              {searchQuery && (
-                <button
-                  onClick={() =>
-                    setSearchQuery("")
-                  }
-                  className="absolute left-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                  aria-label="مسح البحث"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
-            <button
-              onClick={() =>
-                setShowFilters(
-                  !showFilters
-                )
+            <input
+              type="search"
+              inputMode="search"
+              value={searchQuery}
+              onChange={(e) =>
+                setSearchQuery(e.target.value)
               }
-              className={`flex h-12 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold transition sm:w-auto ${
-                showFilters
-                  ? "border-[#0B1E3D] bg-[#0B1E3D] text-white"
-                  : "border-slate-200 bg-white text-[#0B1E3D] hover:bg-slate-50"
-              }`}
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              الفلاتر
+              placeholder="ابحث باسم المنتج..."
+              className="h-12 w-full rounded-xl border border-[#0B1E3D]/10 bg-[#FAFAF8] px-11 pl-11 text-sm font-medium text-[#0B1E3D] outline-none transition placeholder:text-gray-400 focus:border-[#C9A24B] focus:bg-white focus:ring-4 focus:ring-[#C9A24B]/10"
+              dir="rtl"
+            />
 
-              {hasFilters && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#C9A24B] px-1 text-[10px] font-black text-[#0B1E3D]">
-                  !
-                </span>
-              )}
-            </button>
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute left-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+                aria-label="مسح البحث"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
-          {/* Filters */}
+          {/* Mobile filter button */}
+          <button
+            type="button"
+            onClick={() =>
+              setShowFilters((prev) => !prev)
+            }
+            className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#0B1E3D]/10 bg-white text-sm font-bold text-[#0B1E3D] transition hover:bg-gray-50 sm:hidden"
+          >
+            <Filter className="h-4 w-4" />
+            الفلاتر والترتيب
+
+            {hasFilters && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#C9A24B] px-1 text-[10px] font-extrabold text-[#0B1E3D]">
+                !
+              </span>
+            )}
+
+            <ChevronDown
+              className={`mr-auto h-4 w-4 transition-transform ${
+                showFilters ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          {/* Desktop filters */}
+          <div className="mt-3 hidden gap-2 sm:flex sm:flex-wrap">
+            <FilterSelect
+              value={statusFilter}
+              onChange={(value) =>
+                setStatusFilter(
+                  value as StatusFilter
+                )
+              }
+              options={[
+                ["all", "كل الحالات"],
+                ["active", "نشط"],
+                ["inactive", "غير نشط"],
+                ["low_stock", "مخزون منخفض"],
+                ["out_of_stock", "نفد المخزون"],
+              ]}
+            />
+
+            {categories.length > 0 && (
+              <FilterSelect
+                value={categoryFilter}
+                onChange={setCategoryFilter}
+                options={[
+                  ["all", "كل التصنيفات"],
+                  ...categories.map((category) => [
+                    category.id,
+                    category.name_ar,
+                  ]),
+                ]}
+              />
+            )}
+
+            <FilterSelect
+              value={`${sortField}|${sortOrder}`}
+              onChange={(value) => {
+                const [field, order] =
+                  value.split("|");
+
+                setSortField(
+                  field as SortField
+                );
+
+                setSortOrder(
+                  order as SortOrder
+                );
+              }}
+              options={[
+                ["updated_at|desc", "الأحدث أولاً"],
+                ["updated_at|asc", "الأقدم أولاً"],
+                ["name_ar|asc", "الاسم أ - ي"],
+                ["name_ar|desc", "الاسم ي - أ"],
+                ["price|asc", "السعر: الأقل"],
+                ["price|desc", "السعر: الأعلى"],
+                ["stock|asc", "المخزون: الأقل"],
+                ["stock|desc", "المخزون: الأعلى"],
+              ]}
+            />
+
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="flex h-11 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-gray-500 transition hover:bg-red-50 hover:text-red-600"
+              >
+                <X className="h-3.5 w-3.5" />
+                مسح
+              </button>
+            )}
+          </div>
+
+          {/* Mobile filters */}
           {showFilters && (
-            <div className="mt-3 grid grid-cols-1 gap-2.5 border-t border-slate-100 pt-3 sm:grid-cols-3">
-              {/* Status */}
-              <div className="relative">
-                <label className="mb-1.5 block px-1 text-[11px] font-bold text-slate-500">
-                  حالة المنتج
-                </label>
+            <div className="mt-3 space-y-2 border-t border-[#0B1E3D]/5 pt-3 sm:hidden">
+              <FilterSelect
+                full
+                value={statusFilter}
+                onChange={(value) =>
+                  setStatusFilter(
+                    value as StatusFilter
+                  )
+                }
+                options={[
+                  ["all", "كل الحالات"],
+                  ["active", "نشط"],
+                  ["inactive", "غير نشط"],
+                  ["low_stock", "مخزون منخفض"],
+                  ["out_of_stock", "نفد المخزون"],
+                ]}
+              />
 
-                <select
-                  value={statusFilter}
-                  onChange={(e) =>
-                    setStatusFilter(
-                      e.target.value as StatusFilter
-                    )
-                  }
-                  className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-3 pl-9 text-sm font-medium text-[#0B1E3D] outline-none focus:border-[#C9A24B] focus:bg-white"
-                >
-                  <option value="all">
-                    كل الحالات
-                  </option>
-                  <option value="active">
-                    نشط
-                  </option>
-                  <option value="inactive">
-                    غير نشط
-                  </option>
-                  <option value="low_stock">
-                    مخزون منخفض
-                  </option>
-                  <option value="out_of_stock">
-                    نفد المخزون
-                  </option>
-                </select>
-
-                <ChevronDown className="pointer-events-none absolute bottom-3 left-3 h-4 w-4 text-slate-400" />
-              </div>
-
-              {/* Category */}
               {categories.length > 0 && (
-                <div className="relative">
-                  <label className="mb-1.5 block px-1 text-[11px] font-bold text-slate-500">
-                    التصنيف
-                  </label>
-
-                  <select
-                    value={categoryFilter}
-                    onChange={(e) =>
-                      setCategoryFilter(
-                        e.target.value
-                      )
-                    }
-                    className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-3 pl-9 text-sm font-medium text-[#0B1E3D] outline-none focus:border-[#C9A24B] focus:bg-white"
-                  >
-                    <option value="all">
-                      كل التصنيفات
-                    </option>
-
-                    {categories.map(
-                      (category) => (
-                        <option
-                          key={category.id}
-                          value={category.id}
-                        >
-                          {category.name_ar}
-                        </option>
-                      )
-                    )}
-                  </select>
-
-                  <ChevronDown className="pointer-events-none absolute bottom-3 left-3 h-4 w-4 text-slate-400" />
-                </div>
+                <FilterSelect
+                  full
+                  value={categoryFilter}
+                  onChange={setCategoryFilter}
+                  options={[
+                    ["all", "كل التصنيفات"],
+                    ...categories.map((category) => [
+                      category.id,
+                      category.name_ar,
+                    ]),
+                  ]}
+                />
               )}
 
-              {/* Sort */}
-              <div className="relative">
-                <label className="mb-1.5 block px-1 text-[11px] font-bold text-slate-500">
-                  ترتيب المنتجات
-                </label>
+              <FilterSelect
+                full
+                value={`${sortField}|${sortOrder}`}
+                onChange={(value) => {
+                  const [field, order] =
+                    value.split("|");
 
-                <select
-                  value={`${sortField}-${sortOrder}`}
-                  onChange={(e) => {
-                    const [
-                      field,
-                      order,
-                    ] =
-                      e.target.value.split(
-                        "-"
-                      );
+                  setSortField(
+                    field as SortField
+                  );
 
-                    setSortField(
-                      field as SortField
-                    );
-
-                    setSortOrder(
-                      order as SortOrder
-                    );
-                  }}
-                  className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-3 pl-9 text-sm font-medium text-[#0B1E3D] outline-none focus:border-[#C9A24B] focus:bg-white"
-                >
-                  <option value="updated_at-desc">
-                    الأحدث أولاً
-                  </option>
-                  <option value="updated_at-asc">
-                    الأقدم أولاً
-                  </option>
-                  <option value="name_ar-asc">
-                    الاسم أ - ي
-                  </option>
-                  <option value="name_ar-desc">
-                    الاسم ي - أ
-                  </option>
-                  <option value="price-asc">
-                    السعر: الأقل
-                  </option>
-                  <option value="price-desc">
-                    السعر: الأعلى
-                  </option>
-                  <option value="stock-asc">
-                    المخزون: الأقل
-                  </option>
-                  <option value="stock-desc">
-                    المخزون: الأعلى
-                  </option>
-                </select>
-
-                <ArrowUpDown className="pointer-events-none absolute bottom-3 left-3 h-4 w-4 text-slate-400" />
-              </div>
+                  setSortOrder(
+                    order as SortOrder
+                  );
+                }}
+                options={[
+                  ["updated_at|desc", "الأحدث أولاً"],
+                  ["updated_at|asc", "الأقدم أولاً"],
+                  ["name_ar|asc", "الاسم أ - ي"],
+                  ["name_ar|desc", "الاسم ي - أ"],
+                  ["price|asc", "السعر: الأقل"],
+                  ["price|desc", "السعر: الأعلى"],
+                  ["stock|asc", "المخزون: الأقل"],
+                  ["stock|desc", "المخزون: الأعلى"],
+                ]}
+              />
 
               {hasFilters && (
                 <button
+                  type="button"
                   onClick={clearFilters}
-                  className="h-11 rounded-xl border border-red-100 bg-red-50 text-sm font-bold text-red-600 transition hover:bg-red-100 sm:col-span-3"
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-100 bg-red-50 text-xs font-bold text-red-600"
                 >
-                  <span className="inline-flex items-center justify-center gap-2">
-                    <X className="h-4 w-4" />
-                    مسح جميع الفلاتر
-                  </span>
+                  <X className="h-3.5 w-3.5" />
+                  مسح جميع الفلاتر
                 </button>
               )}
             </div>
@@ -1225,318 +1358,317 @@ function AdminProductsContent() {
         </section>
 
         {/* =================================================
-            Results bar
+            RESULTS HEADER
         ================================================= */}
 
         {!loading && (
-          <div className="mb-3 flex items-center justify-between px-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-black text-[#0B1E3D]">
-                {products.length.toLocaleString(
-                  "ar-SA"
-                )}
-              </span>
+          <div className="flex items-center justify-between px-1">
+            <div>
+              <p className="text-xs font-medium text-gray-500">
+                المنتجات
+              </p>
 
-              <span className="text-xs text-slate-500">
-                منتج
-              </span>
+              <p className="mt-0.5 text-sm font-extrabold text-[#0B1E3D]">
+                {products.length > 0
+                  ? `${formatNumber(
+                      products.length
+                    )} منتج`
+                  : "لا توجد نتائج"}
+              </p>
             </div>
 
             {hasFilters && (
-              <button
-                onClick={clearFilters}
-                className="text-xs font-bold text-[#C9A24B]"
-              >
-                إزالة الفلاتر
-              </button>
+              <span className="rounded-full bg-[#F5F0E8] px-3 py-1 text-[10px] font-bold text-[#0B1E3D]">
+                نتائج مفلترة
+              </span>
             )}
           </div>
         )}
 
         {/* =================================================
-            Loading
+            CONTENT
         ================================================= */}
 
         {loading ? (
-          <div className="space-y-3">
-            {Array.from({
-              length: 4,
-            }).map((_, i) => (
-              <SkeletonProduct key={i} />
-            ))}
-          </div>
-        ) : products.length === 0 ? (
-          /* =================================================
-             Empty
-          ================================================= */
-
-          <div className="rounded-[24px] border border-slate-200 bg-white px-5 py-16 text-center shadow-sm">
-            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#F5F0E8]">
-              <ShoppingBag className="h-7 w-7 text-[#C9A24B]" />
-            </div>
-
-            <h3 className="text-lg font-black text-[#0B1E3D]">
-              {hasFilters
-                ? "لا توجد نتائج مطابقة"
-                : "لا توجد منتجات حتى الآن"}
-            </h3>
-
-            <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-500">
-              {hasFilters
-                ? "جرّب تغيير معايير البحث أو إزالة الفلاتر."
-                : "ابدأ بإضافة أول منتج إلى متجرك."}
-            </p>
-
-            <div className="mt-6">
-              {hasFilters ? (
-                <button
-                  onClick={clearFilters}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#0B1E3D] px-5 text-sm font-bold text-white"
-                >
-                  <X className="h-4 w-4" />
-                  مسح الفلاتر
-                </button>
-              ) : (
-                <Link
-                  href="/admin/products/new"
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#C9A24B] px-5 text-sm font-black text-[#0B1E3D]"
-                >
-                  <Plus className="h-4 w-4" />
-                  إضافة أول منتج
-                </Link>
-              )}
-            </div>
-          </div>
-        ) : (
           <>
-            {/* =================================================
-                Mobile / Tablet
-            ================================================= */}
-
-            <div className="grid grid-cols-1 gap-3 lg:hidden">
-              {products.map(
-                (product) => (
-                  <MobileProductCard
-                    key={product.id}
-                    product={product}
-                    onDeleteClick={
-                      setDeleteModalProduct
-                    }
-                    onToggleStatus={
-                      handleToggleStatus
-                    }
-                    isToggling={
-                      isToggling
-                    }
+            <div className="grid gap-3 lg:hidden">
+              {Array.from({ length: 4 }).map(
+                (_, index) => (
+                  <SkeletonProduct
+                    key={index}
                   />
                 )
               )}
             </div>
 
+            <div className="hidden overflow-hidden rounded-2xl border border-[#0B1E3D]/5 bg-white lg:block">
+              <div className="space-y-4 p-6">
+                {Array.from({ length: 5 }).map(
+                  (_, index) => (
+                    <div
+                      key={index}
+                      className="h-14 animate-pulse rounded-xl bg-[#0B1E3D]/5"
+                    />
+                  )
+                )}
+              </div>
+            </div>
+          </>
+        ) : products.length === 0 ? (
+          <EmptyState
+            hasFilters={hasFilters}
+            clearFilters={clearFilters}
+          />
+        ) : (
+          <>
             {/* =================================================
-                Desktop Table
+                MOBILE
             ================================================= */}
 
-            <div className="hidden overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm lg:block">
+            <div className="grid gap-3 lg:hidden">
+              {products.map((product) => (
+                <MobileProductCard
+                  key={product.id}
+                  product={product}
+                  onDeleteClick={
+                    setDeleteModalProduct
+                  }
+                  onToggleStatus={
+                    handleToggleStatus
+                  }
+                  isToggling={isToggling}
+                />
+              ))}
+            </div>
+
+            {/* =================================================
+                DESKTOP TABLE
+            ================================================= */}
+
+            <div className="hidden overflow-hidden rounded-2xl border border-[#0B1E3D]/5 bg-white shadow-[0_3px_16px_rgba(11,30,61,0.04)] lg:block">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[980px] text-sm">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50">
-                      <th className="px-5 py-4 text-right text-xs font-black text-slate-500">
-                        المنتج
-                      </th>
+                    <tr className="border-b border-[#0B1E3D]/5 bg-[#FAFAF8]">
+                      <TableHead>
+                        الصورة
+                      </TableHead>
 
-                      <th className="px-4 py-4 text-right text-xs font-black text-slate-500">
+                      <TableHead
+                        sortable
+                        active={
+                          sortField === "name_ar"
+                        }
+                        order={sortOrder}
+                        onClick={() =>
+                          handleSort("name_ar")
+                        }
+                      >
+                        الاسم
+                      </TableHead>
+
+                      <TableHead>
                         التصنيف
-                      </th>
+                      </TableHead>
 
-                      <th className="px-4 py-4 text-right text-xs font-black text-slate-500">
+                      <TableHead
+                        sortable
+                        active={
+                          sortField === "price"
+                        }
+                        order={sortOrder}
+                        onClick={() =>
+                          handleSort("price")
+                        }
+                      >
                         السعر
-                      </th>
+                      </TableHead>
 
-                      <th className="px-4 py-4 text-right text-xs font-black text-slate-500">
+                      <TableHead
+                        sortable
+                        active={
+                          sortField === "stock"
+                        }
+                        order={sortOrder}
+                        onClick={() =>
+                          handleSort("stock")
+                        }
+                      >
                         المخزون
-                      </th>
+                      </TableHead>
 
-                      <th className="px-4 py-4 text-right text-xs font-black text-slate-500">
+                      <TableHead>
                         الحالة
-                      </th>
+                      </TableHead>
 
-                      <th className="px-4 py-4 text-right text-xs font-black text-slate-500">
+                      <TableHead
+                        sortable
+                        active={
+                          sortField === "updated_at"
+                        }
+                        order={sortOrder}
+                        onClick={() =>
+                          handleSort("updated_at")
+                        }
+                      >
                         التحديث
-                      </th>
+                      </TableHead>
 
-                      <th className="px-5 py-4 text-right text-xs font-black text-slate-500">
+                      <TableHead>
                         الإجراءات
-                      </th>
+                      </TableHead>
                     </tr>
                   </thead>
 
-                  <tbody className="divide-y divide-slate-100">
-                    {products.map(
-                      (product) => (
-                        <tr
-                          key={product.id}
-                          className="transition hover:bg-[#FAFAF8]"
-                        >
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-3">
-                              <ProductImage
-                                src={
-                                  product.images?.[0] ||
-                                  null
-                                }
-                                alt={
-                                  product.name_ar
-                                }
-                              />
+                  <tbody className="divide-y divide-[#0B1E3D]/5">
+                    {products.map((product) => (
+                      <tr
+                        key={product.id}
+                        className="group transition-colors hover:bg-[#FAFAF8]"
+                      >
+                        <td className="px-4 py-4">
+                          <ProductImage
+                            src={
+                              product.images?.[0] ||
+                              null
+                            }
+                            alt={
+                              product.name_ar
+                            }
+                            size="sm"
+                          />
+                        </td>
 
-                              <div className="min-w-0">
-                                <div
-                                  dir="rtl"
-                                  className="max-w-[230px] truncate font-bold text-[#0B1E3D]"
-                                >
-                                  {
-                                    product.name_ar
-                                  }
-                                </div>
+                        <td className="max-w-[240px] px-4 py-4">
+                          <p
+                            className="truncate font-bold text-[#0B1E3D]"
+                            dir="rtl"
+                          >
+                            {product.name_ar}
+                          </p>
+                        </td>
 
-                                <div className="mt-1 text-[11px] text-slate-400">
-                                  ID:{" "}
-                                  {product.id.slice(
-                                    0,
-                                    8
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
+                        <td className="px-4 py-4">
+                          <span className="inline-flex max-w-[150px] items-center gap-1.5 truncate text-xs text-gray-600">
+                            <Tag className="h-3.5 w-3.5 shrink-0 text-[#C9A24B]" />
 
-                          <td className="px-4 py-4">
-                            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
-                              <Tag className="h-3.5 w-3.5 text-[#C9A24B]" />
+                            <span className="truncate">
                               {product.category
                                 ?.name_ar ||
                                 "بدون تصنيف"}
                             </span>
-                          </td>
+                          </span>
+                        </td>
 
-                          <td className="px-4 py-4 font-black text-[#0B1E3D]">
-                            {formatPrice(
-                              product.price
+                        <td className="whitespace-nowrap px-4 py-4 font-extrabold text-[#0B1E3D]">
+                          {formatPrice(
+                            product.price
+                          )}
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <span
+                            className={`font-extrabold ${
+                              product.stock === 0
+                                ? "text-red-600"
+                                : product.stock <= 5
+                                ? "text-orange-600"
+                                : "text-[#0B1E3D]"
+                            }`}
+                          >
+                            {formatNumber(
+                              product.stock
                             )}
-                          </td>
+                          </span>
+                        </td>
 
-                          <td className="px-4 py-4">
-                            <span
-                              className={`font-black ${
-                                product.stock ===
-                                0
-                                  ? "text-red-600"
-                                  : product.stock <=
-                                    5
-                                  ? "text-orange-600"
-                                  : "text-[#0B1E3D]"
-                              }`}
+                        <td className="px-4 py-4">
+                          <StatusBadge
+                            stock={
+                              product.stock
+                            }
+                            isActive={
+                              product.is_active
+                            }
+                          />
+                        </td>
+
+                        <td className="whitespace-nowrap px-4 py-4 text-xs text-gray-500">
+                          {formatDate(
+                            product.updated_at
+                          )}
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-1">
+                            <Link
+                              href={`/admin/products/${product.id}`}
+                              className="flex h-9 w-9 items-center justify-center rounded-lg text-[#0B1E3D] transition hover:bg-[#0B1E3D]/5 hover:text-[#C9A24B]"
+                              title="تعديل"
                             >
-                              {
-                                product.stock
-                              }
-                            </span>
-                          </td>
+                              <Pencil className="h-4 w-4" />
+                            </Link>
 
-                          <td className="px-4 py-4">
-                            <StatusBadge
-                              stock={
-                                product.stock
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleToggleStatus(
+                                  product.id,
+                                  product.is_active
+                                )
                               }
-                              isActive={
+                              disabled={
+                                isToggling ===
+                                product.id
+                              }
+                              className={`flex h-9 w-9 items-center justify-center rounded-lg transition ${
                                 product.is_active
+                                  ? "text-orange-600 hover:bg-orange-50"
+                                  : "text-green-600 hover:bg-green-50"
+                              } disabled:opacity-50`}
+                              title={
+                                product.is_active
+                                  ? "تعطيل"
+                                  : "تفعيل"
                               }
-                            />
-                          </td>
+                            >
+                              {isToggling ===
+                              product.id ? (
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                              ) : product.is_active ? (
+                                <XCircle className="h-4 w-4" />
+                              ) : (
+                                <CheckCircle2 className="h-4 w-4" />
+                              )}
+                            </button>
 
-                          <td className="px-4 py-4 text-xs font-medium text-slate-500">
-                            {new Date(
-                              product.updated_at
-                            ).toLocaleDateString(
-                              "ar-SA",
-                              {
-                                year:
-                                  "numeric",
-                                month:
-                                  "short",
-                                day:
-                                  "numeric",
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeleteModalProduct(
+                                  product
+                                )
                               }
-                            )}
-                          </td>
-
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-1.5">
-                              <Link
-                                href={`/admin/products/${product.id}`}
-                                className="flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-bold text-[#0B1E3D] transition hover:bg-slate-100"
-                              >
-                                <Pencil className="h-4 w-4" />
-                                تعديل
-                              </Link>
-
-                              <button
-                                onClick={() =>
-                                  handleToggleStatus(
-                                    product.id,
-                                    product.is_active
-                                  )
-                                }
-                                disabled={
-                                  isToggling ===
-                                  product.id
-                                }
-                                className={`flex h-9 items-center justify-center rounded-lg px-2 transition disabled:opacity-50 ${
-                                  product.is_active
-                                    ? "text-orange-600 hover:bg-orange-50"
-                                    : "text-emerald-600 hover:bg-emerald-50"
-                                }`}
-                                title={
-                                  product.is_active
-                                    ? "تعطيل"
-                                    : "تفعيل"
-                                }
-                              >
-                                {isToggling ===
-                                product.id ? (
-                                  <RefreshCw className="h-4 w-4 animate-spin" />
-                                ) : product.is_active ? (
-                                  <XCircle className="h-4 w-4" />
-                                ) : (
-                                  <CheckCircle2 className="h-4 w-4" />
-                                )}
-                              </button>
-
-                              <button
-                                onClick={() =>
-                                  setDeleteModalProduct(
-                                    product
-                                  )
-                                }
-                                className="flex h-9 items-center justify-center rounded-lg px-2 text-red-500 transition hover:bg-red-50"
-                                title="حذف"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    )}
+                              className="flex h-9 w-9 items-center justify-center rounded-lg text-red-500 transition hover:bg-red-50"
+                              title="حذف"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             </div>
           </>
         )}
-      </main>
+      </div>
+
+      {/* =====================================================
+          DELETE MODAL
+      ===================================================== */}
 
       <DeleteModal
         product={deleteModalProduct}
@@ -1546,12 +1678,109 @@ function AdminProductsContent() {
         onConfirm={handleDelete}
         isDeleting={isDeleting}
       />
+    </main>
+  );
+}
+
+/* =========================================================
+   FILTER SELECT
+========================================================= */
+
+function FilterSelect({
+  value,
+  onChange,
+  options,
+  full = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[][];
+  full?: boolean;
+}) {
+  return (
+    <div
+      className={`relative ${
+        full ? "w-full" : ""
+      }`}
+    >
+      <select
+        value={value}
+        onChange={(e) =>
+          onChange(e.target.value)
+        }
+        className={`h-11 appearance-none rounded-xl border border-[#0B1E3D]/10 bg-white pr-3 pl-9 text-xs font-bold text-[#0B1E3D] outline-none transition focus:border-[#C9A24B] focus:ring-4 focus:ring-[#C9A24B]/10 ${
+          full
+            ? "w-full"
+            : "min-w-[145px]"
+        }`}
+        dir="rtl"
+      >
+        {options.map(([optionValue, label]) => (
+          <option
+            key={optionValue}
+            value={optionValue}
+          >
+            {label}
+          </option>
+        ))}
+      </select>
+
+      <ChevronDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
     </div>
   );
 }
 
 /* =========================================================
-   Page
+   TABLE HEAD
+========================================================= */
+
+function TableHead({
+  children,
+  sortable = false,
+  active = false,
+  order = "desc",
+  onClick,
+}: {
+  children: React.ReactNode;
+  sortable?: boolean;
+  active?: boolean;
+  order?: SortOrder;
+  onClick?: () => void;
+}) {
+  return (
+    <th className="px-4 py-3.5 text-right">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={!sortable}
+        className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold transition ${
+          sortable
+            ? "cursor-pointer hover:text-[#C9A24B]"
+            : "cursor-default"
+        } ${
+          active
+            ? "text-[#0B1E3D]"
+            : "text-gray-500"
+        }`}
+      >
+        {children}
+
+        {sortable && (
+          <ArrowUpDown
+            className={`h-3 w-3 ${
+              active && order === "asc"
+                ? "rotate-180"
+                : ""
+            }`}
+          />
+        )}
+      </button>
+    </th>
+  );
+}
+
+/* =========================================================
+   PAGE
 ========================================================= */
 
 export default function AdminProductsPage() {
@@ -1559,27 +1788,31 @@ export default function AdminProductsPage() {
     <Suspense
       fallback={
         <div
-          dir="rtl"
           className="min-h-screen bg-[#FAFAF8] px-4 py-5"
+          dir="rtl"
         >
-          <div className="mx-auto max-w-7xl space-y-4">
-            <div className="h-16 animate-pulse rounded-2xl bg-white" />
+          <div className="mx-auto max-w-7xl space-y-5">
+            <div className="h-28 animate-pulse rounded-2xl bg-white" />
 
-            <div className="grid grid-cols-2 gap-3">
-              {Array.from({
-                length: 5,
-              }).map((_, i) => (
-                <SkeletonKPI key={i} />
-              ))}
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+              {Array.from({ length: 5 }).map(
+                (_, index) => (
+                  <SkeletonKPI key={index} />
+                )
+              )}
             </div>
 
-            <div className="h-16 animate-pulse rounded-2xl bg-white" />
+            <div className="h-24 animate-pulse rounded-2xl bg-white" />
 
-            {Array.from({
-              length: 4,
-            }).map((_, i) => (
-              <SkeletonProduct key={i} />
-            ))}
+            <div className="grid gap-3">
+              {Array.from({ length: 4 }).map(
+                (_, index) => (
+                  <SkeletonProduct
+                    key={index}
+                  />
+                )
+              )}
+            </div>
           </div>
         </div>
       }
