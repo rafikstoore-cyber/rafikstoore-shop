@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 const egyptianPhoneRegex = /^01[0125]\d{8}$/;
+
+const MAX_BODY_BYTES = 50_000;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 8;
+
+const rateLimitMap = new Map<
+  string,
+  { count: number; resetAt: number }
+>();
 
 type OrderItemInput = {
   productId: string;
@@ -23,25 +34,75 @@ type OrderPayload = {
     building?: string;
   };
   notes?: string;
+  idempotencyKey?: string;
 };
 
-function generateOrderNumber() {
+function getClientIp(request: NextRequest): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+
+  if (forwarded) {
+    return forwarded.split(",")[0].trim();
+  }
+
+  return request.headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+
+  if (!entry || now >= entry.resetAt) {
+    rateLimitMap.set(ip, {
+      count: 1,
+      resetAt: now + RATE_LIMIT_WINDOW_MS,
+    });
+
+    return true;
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return false;
+  }
+
+  entry.count += 1;
+  return true;
+}
+
+function cleanupRateLimitMap() {
+  const now = Date.now();
+
+  for (const [ip, entry] of rateLimitMap.entries()) {
+    if (now >= entry.resetAt) {
+      rateLimitMap.delete(ip);
+    }
+  }
+}
+
+function generateOrderNumber(): string {
   const timestamp = Date.now().toString().slice(-8);
-  const random = Math.floor(1000 + Math.random() * 9000);
+  const random = randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
+
   return `RS-${timestamp}-${random}`;
 }
 
 function isValidPayload(body: unknown): body is OrderPayload {
-  if (!body || typeof body !== "object") return false;
+  if (!body || typeof body !== "object") {
+    return false;
+  }
 
   const payload = body as OrderPayload;
 
-  if (!Array.isArray(payload.items) || payload.items.length === 0) {
+  if (!Array.isArray(payload.items)) {
+    return false;
+  }
+
+  if (payload.items.length === 0 || payload.items.length > 30) {
     return false;
   }
 
   if (
     !payload.customer ||
+    typeof payload.customer !== "object" ||
     typeof payload.customer.name !== "string" ||
     typeof payload.customer.phone !== "string"
   ) {
@@ -50,6 +111,7 @@ function isValidPayload(body: unknown): body is OrderPayload {
 
   if (
     !payload.shippingAddress ||
+    typeof payload.shippingAddress !== "object" ||
     typeof payload.shippingAddress.governorate !== "string" ||
     typeof payload.shippingAddress.city !== "string" ||
     typeof payload.shippingAddress.street !== "string"
@@ -57,23 +119,120 @@ function isValidPayload(body: unknown): body is OrderPayload {
     return false;
   }
 
-  return payload.items.every(
-    (item) =>
+  if (
+    payload.shippingAddress.building !== undefined &&
+    typeof payload.shippingAddress.building !== "string"
+  ) {
+    return false;
+  }
+
+  if (
+    payload.notes !== undefined &&
+    typeof payload.notes !== "string"
+  ) {
+    return false;
+  }
+
+  if (
+    payload.idempotencyKey !== undefined &&
+    typeof payload.idempotencyKey !== "string"
+  ) {
+    return false;
+  }
+
+  return payload.items.every((item) => {
+    if (!item || typeof item !== "object") {
+      return false;
+    }
+
+    return (
       typeof item.productId === "string" &&
       item.productId.length > 0 &&
       Number.isInteger(item.quantity) &&
       item.quantity > 0 &&
       item.quantity <= 100
-  );
+    );
+  });
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body: unknown = await request.json();
+    // --------------------------------------------------
+    // 1. Rate limiting
+    // --------------------------------------------------
+
+    cleanupRateLimitMap();
+
+    const ip = getClientIp(request);
+
+    if (!checkRateLimit(ip)) {
+      console.warn(`[orders] rate limit exceeded for IP: ${ip}`);
+
+      return NextResponse.json(
+        {
+          error: "عدد الطلبات كبير جدًا، حاول بعد قليل",
+        },
+        { status: 429 }
+      );
+    }
+
+    // --------------------------------------------------
+    // 2. Body size protection
+    // --------------------------------------------------
+
+    const contentLength = request.headers.get("content-length");
+
+    if (contentLength) {
+      const parsedLength = Number.parseInt(contentLength, 10);
+
+      if (
+        Number.isFinite(parsedLength) &&
+        parsedLength > MAX_BODY_BYTES
+      ) {
+        return NextResponse.json(
+          {
+            error: "حجم الطلب كبير جدًا",
+          },
+          { status: 413 }
+        );
+      }
+    }
+
+    const rawBody = await request.text();
+
+    const bodySize = new TextEncoder().encode(rawBody).byteLength;
+
+    if (bodySize > MAX_BODY_BYTES) {
+      return NextResponse.json(
+        {
+          error: "حجم الطلب كبير جدًا",
+        },
+        { status: 413 }
+      );
+    }
+
+    let body: unknown;
+
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return NextResponse.json(
+        {
+          error: "بيانات الطلب غير صحيحة",
+        },
+        { status: 400 }
+      );
+    }
+
+    // --------------------------------------------------
+    // 3. Strict payload validation
+    // --------------------------------------------------
 
     if (!isValidPayload(body)) {
       return NextResponse.json(
-        { error: "بيانات الطلب غير صحيحة" },
+        {
+          error: "بيانات الطلب غير صحيحة",
+        },
         { status: 400 }
       );
     }
@@ -81,227 +240,300 @@ export async function POST(request: NextRequest) {
     const name = body.customer.name.trim();
     const phone = body.customer.phone.trim();
 
-    const governorate = body.shippingAddress.governorate.trim();
-    const city = body.shippingAddress.city.trim();
-    const street = body.shippingAddress.street.trim();
-    const building = body.shippingAddress.building?.trim() || null;
-    const notes = body.notes?.trim() || null;
+    const governorate =
+      body.shippingAddress.governorate.trim();
 
-    if (name.length < 2) {
+    const city =
+      body.shippingAddress.city.trim();
+
+    const street =
+      body.shippingAddress.street.trim();
+
+    const building =
+      body.shippingAddress.building?.trim() || null;
+
+    const notes =
+      body.notes?.trim() || null;
+
+    // --------------------------------------------------
+    // 4. Normalized field validation
+    // --------------------------------------------------
+
+    if (name.length < 2 || name.length > 120) {
       return NextResponse.json(
-        { error: "الاسم الكامل مطلوب" },
+        {
+          error: "الاسم الكامل مطلوب",
+        },
         { status: 400 }
       );
     }
 
     if (!egyptianPhoneRegex.test(phone)) {
       return NextResponse.json(
-        { error: "رقم الهاتف غير صحيح" },
+        {
+          error: "رقم الهاتف غير صحيح",
+        },
         { status: 400 }
       );
     }
 
     if (governorate.length < 2) {
       return NextResponse.json(
-        { error: "المحافظة مطلوبة" },
+        {
+          error: "المحافظة مطلوبة",
+        },
         { status: 400 }
       );
     }
 
-    if (city.length < 1) {
+    if (governorate.length > 100) {
       return NextResponse.json(
-        { error: "المدينة مطلوبة" },
+        {
+          error: "اسم المحافظة طويل جدًا",
+        },
         { status: 400 }
       );
     }
 
-    if (street.length < 3) {
+    if (city.length < 1 || city.length > 100) {
       return NextResponse.json(
-        { error: "العنوان بالتفصيل مطلوب" },
+        {
+          error: "المدينة غير صحيحة",
+        },
         { status: 400 }
       );
     }
+
+    if (street.length < 3 || street.length > 300) {
+      return NextResponse.json(
+        {
+          error: "العنوان بالتفصيل غير صحيح",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (building && building.length > 100) {
+      return NextResponse.json(
+        {
+          error: "رقم المبنى غير صحيح",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (notes && notes.length > 1000) {
+      return NextResponse.json(
+        {
+          error: "الملاحظات طويلة جدًا",
+        },
+        { status: 400 }
+      );
+    }
+
+    // --------------------------------------------------
+    // 5. Idempotency key
+    // Header takes precedence over body.
+    // --------------------------------------------------
+
+    const headerKey =
+      request.headers.get("Idempotency-Key")?.trim() || null;
+
+    const bodyKey =
+      body.idempotencyKey?.trim() || null;
+
+    let idempotencyKey = headerKey || bodyKey;
+
+    if (headerKey && bodyKey && headerKey !== bodyKey) {
+      return NextResponse.json(
+        {
+          error: "مفتاح التكرار غير متطابق",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (idempotencyKey) {
+      if (
+        idempotencyKey.length < 8 ||
+        idempotencyKey.length > 100
+      ) {
+        return NextResponse.json(
+          {
+            error: "مفتاح التكرار غير صالح",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // --------------------------------------------------
+    // 6. Server-side order number
+    // --------------------------------------------------
+
+    const orderNumber = generateOrderNumber();
+
+    // --------------------------------------------------
+    // 7. Atomic RPC only
+    // --------------------------------------------------
 
     const supabase = createAdminClient();
 
-    const productIds = [...new Set(body.items.map((item) => item.productId))];
+    const { data, error } = await supabase.rpc(
+      "create_order_atomic",
+      {
+        p_items: body.items.map((item) => ({
+          product_id: item.productId,
+          quantity: item.quantity,
+        })),
 
-    const { data: products, error: productsError } = await supabase
-      .from("products")
-      .select(
-        "id, name, name_ar, price, images, stock, is_active"
-      )
-      .in("id", productIds);
+        p_customer_name: name,
 
-    if (productsError) {
-      console.error("Order products query error:", productsError);
+        p_customer_phone: phone,
 
-      return NextResponse.json(
-        { error: "تعذر التحقق من المنتجات" },
-        { status: 500 }
-      );
-    }
+        p_shipping_address: {
+          governorate,
+          city,
+          street,
+          ...(building ? { building } : {}),
+        },
 
-    if (!products || products.length !== productIds.length) {
-      return NextResponse.json(
-        { error: "أحد المنتجات لم يعد متاحًا" },
-        { status: 400 }
-      );
-    }
+        p_notes: notes,
 
-    const productMap = new Map(
-      products.map((product) => [product.id, product])
+        p_user_id: null,
+
+        p_idempotency_key: idempotencyKey,
+
+        p_order_number: orderNumber,
+      }
     );
 
-    const orderItems: {
-      product_id: string;
-      product_name: string;
-      product_image: string | null;
-      unit_price: number;
-      quantity: number;
-      total: number;
-    }[] = [];
+    // --------------------------------------------------
+    // 8. RPC error mapping
+    // --------------------------------------------------
 
-    let subtotal = 0;
+    if (error) {
+      const msg = error.message || "";
 
-    for (const requestedItem of body.items) {
-      const product = productMap.get(requestedItem.productId);
-
-      if (!product) {
+      if (
+        msg.includes("OUT_OF_STOCK") ||
+        msg.includes("OUT_OF_STOCK_RACE")
+      ) {
         return NextResponse.json(
-          { error: "أحد المنتجات غير موجود" },
+          {
+            error: "الكمية المطلوبة غير متوفرة",
+          },
+          { status: 409 }
+        );
+      }
+
+      if (msg.includes("PRODUCT_INACTIVE")) {
+        return NextResponse.json(
+          {
+            error: "أحد المنتجات غير متاح حاليًا",
+          },
           { status: 400 }
         );
       }
 
-      if (!product.is_active) {
+      if (msg.includes("PRODUCT_NOT_FOUND")) {
         return NextResponse.json(
           {
-            error: `المنتج "${product.name_ar || product.name}" غير متاح حاليًا`,
+            error: "أحد المنتجات لم يعد متاحًا",
           },
           { status: 400 }
         );
       }
 
       if (
-        typeof product.stock === "number" &&
-        product.stock < requestedItem.quantity
+        msg.includes(
+          "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD"
+        )
       ) {
         return NextResponse.json(
           {
-            error: `الكمية المطلوبة من "${product.name_ar || product.name}" غير متوفرة`,
+            error: "مفتاح التكرار مستخدم مع طلب مختلف",
+          },
+          { status: 409 }
+        );
+      }
+
+      if (msg.includes("INVALID_IDEMPOTENCY_KEY")) {
+        return NextResponse.json(
+          {
+            error: "مفتاح التكرار غير صالح",
           },
           { status: 400 }
         );
       }
 
-      const unitPrice = Number(product.price);
-
-      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      if (
+        msg.includes("INVALID_") ||
+        msg.includes("TOO_MANY_ITEMS")
+      ) {
         return NextResponse.json(
-          { error: "سعر أحد المنتجات غير صالح" },
+          {
+            error: "بيانات الطلب غير صحيحة",
+          },
           { status: 400 }
         );
       }
 
-      const itemTotal = unitPrice * requestedItem.quantity;
+      console.error(
+        "create_order_atomic error:",
+        error
+      );
 
-      subtotal += itemTotal;
-
-      orderItems.push({
-        product_id: product.id,
-        product_name: product.name_ar || product.name,
-        product_image:
-          Array.isArray(product.images) && product.images.length > 0
-            ? product.images[0]
-            : null,
-        unit_price: unitPrice,
-        quantity: requestedItem.quantity,
-        total: itemTotal,
-      });
-    }
-
-    const shippingFee = 0;
-    const discount = 0;
-    const total = subtotal + shippingFee - discount;
-    const orderNumber = generateOrderNumber();
-
-    const {
-      data: {
-        user,
-      },
-    } = await supabase.auth.getUser();
-
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        order_number: orderNumber,
-        user_id: user?.id ?? null,
-        status: "pending",
-        payment_method: "cod",
-        subtotal,
-        shipping_fee: shippingFee,
-        discount,
-        total,
-        coupon_code: null,
-        shipping_address: {
-          governorate,
-          city,
-          street,
-          ...(building ? { building } : {}),
+      return NextResponse.json(
+        {
+          error: "تعذر إنشاء الطلب، حاول مرة أخرى",
         },
-        customer_name: name,
-        customer_phone: phone,
-        notes,
-      })
-      .select("id, order_number, total")
-      .single();
-
-    if (orderError || !order) {
-      console.error("Order insert error:", orderError);
-
-      return NextResponse.json(
-        { error: "تعذر إنشاء الطلب، حاول مرة أخرى" },
         { status: 500 }
       );
     }
 
-    const orderItemsToInsert = orderItems.map((item) => ({
-      order_id: order.id,
-      ...item,
-    }));
+    // --------------------------------------------------
+    // 9. Validate RPC response
+    // --------------------------------------------------
 
-    const { error: orderItemsError } = await supabase
-      .from("order_items")
-      .insert(orderItemsToInsert);
-
-    if (orderItemsError) {
-      console.error("Order items insert error:", orderItemsError);
-
-      await supabase
-        .from("orders")
-        .delete()
-        .eq("id", order.id);
-
+    if (
+      !data ||
+      typeof data !== "object" ||
+      !data.order_number
+    ) {
       return NextResponse.json(
-        { error: "تعذر حفظ عناصر الطلب، حاول مرة أخرى" },
+        {
+          error: "تعذر إنشاء الطلب، حاول مرة أخرى",
+        },
         { status: 500 }
       );
     }
+
+    // --------------------------------------------------
+    // 10. Final response
+    // --------------------------------------------------
 
     return NextResponse.json(
       {
         success: true,
-        orderNumber: order.order_number,
-        total: Number(order.total),
+        orderNumber: data.order_number,
+        total: Number(data.total),
+        idempotent: Boolean(data.idempotent),
       },
-      { status: 201 }
+      {
+        status: data.idempotent ? 200 : 201,
+      }
     );
   } catch (error) {
-    console.error("POST /api/orders error:", error);
+    console.error(
+      "POST /api/orders error:",
+      error
+    );
 
     return NextResponse.json(
-      { error: "حدث خطأ غير متوقع، حاول مرة أخرى" },
+      {
+        error: "حدث خطأ غير متوقع، حاول مرة أخرى",
+      },
       { status: 500 }
     );
   }
