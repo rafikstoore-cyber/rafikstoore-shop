@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -50,6 +55,11 @@ export default function CheckoutPage() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // P0-01 v3:
+  // نفس المفتاح يبقى ثابتًا طوال دورة checkout الحالية،
+  // حتى إذا فشل الاتصال وأعاد المستخدم المحاولة.
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   const SHIPPING_FEE_EGP = 0;
   const total = subtotal + SHIPPING_FEE_EGP;
@@ -102,6 +112,22 @@ export default function CheckoutPage() {
     setApiError(null);
     setIsSubmitting(true);
 
+    // P0-01 v3:
+    // إنشاء المفتاح مرة واحدة فقط لكل دورة checkout.
+    // إذا فشل fetch بسبب الشبكة ثم أعاد المستخدم المحاولة،
+    // سيُستخدم نفس المفتاح ولن يتم إنشاء Order ثانية.
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current =
+        typeof crypto !== "undefined" &&
+        typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `ik-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 11)}`;
+    }
+
+    const idempotencyKey = idempotencyKeyRef.current;
+
     const payload = {
       items: items.map((item) => ({
         productId: item.productId,
@@ -118,22 +144,35 @@ export default function CheckoutPage() {
         ...(form.building.trim() ? { building: form.building.trim() } : {}),
       },
       ...(form.notes.trim() ? { notes: form.notes.trim() } : {}),
+      idempotencyKey,
     };
 
     let response: Response;
+
     try {
       response = await fetch("/api/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
         body: JSON.stringify(payload),
       });
     } catch {
-      setApiError("تعذر الاتصال بالخادم، تحقق من اتصالك بالإنترنت وحاول مرة أخرى");
+      setApiError(
+        "تعذر الاتصال بالخادم، تحقق من اتصالك بالإنترنت وحاول مرة أخرى"
+      );
       setIsSubmitting(false);
       return;
     }
 
-    let data: { error?: string; orderNumber?: string; total?: number };
+    let data: {
+      error?: string;
+      orderNumber?: string;
+      total?: number;
+      idempotent?: boolean;
+    };
+
     try {
       data = await response.json();
     } catch {
@@ -155,6 +194,10 @@ export default function CheckoutPage() {
     }
 
     clearCart();
+
+    // بعد نجاح الطلب فقط، يمكن بدء دورة checkout جديدة.
+    idempotencyKeyRef.current = null;
+
     router.push(
       `/order-confirmation?order=${encodeURIComponent(
         data.orderNumber
@@ -177,12 +220,15 @@ export default function CheckoutPage() {
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-rafik-gold/10">
           <ShoppingBag className="h-9 w-9 text-rafik-gold" />
         </div>
+
         <h1 className="mt-6 font-display text-2xl font-bold text-rafik-navy">
           السلة فارغة
         </h1>
+
         <p className="mt-2 max-w-sm text-sm leading-6 text-rafik-navy/60">
           لا يمكن إتمام الطلب بدون منتجات. تصفح المتجر وأضف ما يعجبك أولاً.
         </p>
+
         <Link href="/products" className="btn-accent mt-6 inline-block">
           العودة إلى المتجر
         </Link>
@@ -217,6 +263,7 @@ export default function CheckoutPage() {
             <label className="mb-1.5 block text-sm font-medium text-rafik-navy">
               الاسم الكامل
             </label>
+
             <input
               type="text"
               value={form.fullName}
@@ -224,6 +271,7 @@ export default function CheckoutPage() {
               className={inputClass}
               aria-invalid={Boolean(fieldErrors.fullName)}
             />
+
             {fieldErrors.fullName && (
               <p className="mt-1 text-xs font-medium text-red-500">
                 {fieldErrors.fullName}
@@ -235,6 +283,7 @@ export default function CheckoutPage() {
             <label className="mb-1.5 block text-sm font-medium text-rafik-navy">
               رقم الهاتف
             </label>
+
             <input
               type="tel"
               inputMode="numeric"
@@ -244,6 +293,7 @@ export default function CheckoutPage() {
               className={inputClass}
               aria-invalid={Boolean(fieldErrors.phone)}
             />
+
             {fieldErrors.phone && (
               <p className="mt-1 text-xs font-medium text-red-500">
                 {fieldErrors.phone}
@@ -256,13 +306,17 @@ export default function CheckoutPage() {
               <label className="mb-1.5 block text-sm font-medium text-rafik-navy">
                 المحافظة
               </label>
+
               <input
                 type="text"
                 value={form.governorate}
-                onChange={(e) => updateField("governorate", e.target.value)}
+                onChange={(e) =>
+                  updateField("governorate", e.target.value)
+                }
                 className={inputClass}
                 aria-invalid={Boolean(fieldErrors.governorate)}
               />
+
               {fieldErrors.governorate && (
                 <p className="mt-1 text-xs font-medium text-red-500">
                   {fieldErrors.governorate}
@@ -274,6 +328,7 @@ export default function CheckoutPage() {
               <label className="mb-1.5 block text-sm font-medium text-rafik-navy">
                 المدينة
               </label>
+
               <input
                 type="text"
                 value={form.city}
@@ -281,6 +336,7 @@ export default function CheckoutPage() {
                 className={inputClass}
                 aria-invalid={Boolean(fieldErrors.city)}
               />
+
               {fieldErrors.city && (
                 <p className="mt-1 text-xs font-medium text-red-500">
                   {fieldErrors.city}
@@ -293,6 +349,7 @@ export default function CheckoutPage() {
             <label className="mb-1.5 block text-sm font-medium text-rafik-navy">
               الشارع (العنوان بالتفصيل)
             </label>
+
             <input
               type="text"
               value={form.street}
@@ -300,6 +357,7 @@ export default function CheckoutPage() {
               className={inputClass}
               aria-invalid={Boolean(fieldErrors.street)}
             />
+
             {fieldErrors.street && (
               <p className="mt-1 text-xs font-medium text-red-500">
                 {fieldErrors.street}
@@ -314,6 +372,7 @@ export default function CheckoutPage() {
                 (اختياري)
               </span>
             </label>
+
             <input
               type="text"
               value={form.building}
@@ -329,6 +388,7 @@ export default function CheckoutPage() {
                 (اختياري)
               </span>
             </label>
+
             <textarea
               value={form.notes}
               onChange={(e) => updateField("notes", e.target.value)}
@@ -359,14 +419,17 @@ export default function CheckoutPage() {
                     className="object-cover"
                   />
                 </div>
+
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-rafik-ink">
                     {item.name}
                   </p>
+
                   <p className="text-xs text-rafik-navy/50">
                     {item.quantity} × {item.price} ج.م
                   </p>
                 </div>
+
                 <span className="shrink-0 text-sm font-bold text-rafik-navy">
                   {item.price * item.quantity} ج.م
                 </span>
@@ -379,18 +442,23 @@ export default function CheckoutPage() {
               <dt className="text-rafik-navy/60">
                 عدد المنتجات ({totalItems})
               </dt>
+
               <dd className="font-semibold text-rafik-navy">
                 {subtotal} ج.م
               </dd>
             </div>
+
             <div className="flex items-center justify-between">
               <dt className="text-rafik-navy/60">الشحن</dt>
+
               <dd className="font-semibold text-rafik-navy">
                 {SHIPPING_FEE_EGP} ج.م
               </dd>
             </div>
+
             <div className="flex items-center justify-between border-t border-rafik-navy/10 pt-3">
               <dt className="font-bold text-rafik-navy">الإجمالي</dt>
+
               <dd className="price-tag">{total} ج.م</dd>
             </div>
           </dl>
@@ -400,8 +468,13 @@ export default function CheckoutPage() {
             disabled={isSubmitting}
             className="btn-primary mt-5 flex w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isSubmitting ? "جاري إرسال الطلب..." : "تأكيد الطلب"}
+            {isSubmitting && (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            )}
+
+            {isSubmitting
+              ? "جاري إرسال الطلب..."
+              : "تأكيد الطلب"}
           </button>
         </div>
       </form>
