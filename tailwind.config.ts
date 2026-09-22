@@ -6,13 +6,13 @@ const config: Config = {
     extend: {
       colors: {
         rafik: {
-          navy: "#0B1E3D",
-          blue: "#12336B",
-          blueLight: "#2A4E8C",
-          gold: "#C9A24B",
-          goldLight: "#E4C878",
-          cream: "#FAF7F0",
-          ink: "#1A1A1A",
+          navy: "#14151C",
+          blue: "#2F3EFF",
+          blueLight: "#5865FF",
+          gold: "#E8A33D",
+          goldLight: "#F0BE73",
+          cream: "#F6F5F1",
+          ink: "#14151C",
         },
       },
       fontFamily: {
@@ -20,7 +20,7 @@ const config: Config = {
         body: ["var(--font-body)", "sans-serif"],
       },
       boxShadow: {
-        gold: "0 4px 20px rgba(201,162,75,0.25)",
+        gold: "0 4px 20px rgba(232,163,61,0.25)",
       },
     },
   },
